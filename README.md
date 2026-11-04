@@ -63,7 +63,7 @@ A comprehensive, responsive, high-fidelity **Cafeteria Pre-Order & Dining Web Pl
      3. *Cooking in Kitchen (Animated Pulse)*
      4. *Ready at Pickup Counter*
      5. *Collected by Student*
-   - Interactive simulation button (*"⚡ Simulate Kitchen Step"*) to test real-time state changes.
+   - Interactive simulation button ("⚡ Simulate Kitchen Step") to test real-time state changes.
 
 7. **Digital QR Pickup Token Page** (`order-ready`)
    - Celebratory confetti burst on order completion 🎉.
@@ -122,7 +122,7 @@ A comprehensive, responsive, high-fidelity **Cafeteria Pre-Order & Dining Web Pl
     - Cafeteria food tray vector illustration.
     - Email / Roll No and password with show/hide toggle.
     - Google Campus SSO and College ID single-click authentication.
-    - Pre-filled credentials for one-click testing.
+    - Pre-filled credentials for one‑click testing.
 
 17. **Kitchen Display System (KDS) & Admin Dashboard Page** (`admin`)
     - Live Kanban kitchen queue: *New Orders*, *Cooking in Kitchen*, *Ready at Counter*.
@@ -139,7 +139,7 @@ A comprehensive, responsive, high-fidelity **Cafeteria Pre-Order & Dining Web Pl
 ## 🎛️ Navigation & Interactions
 
 * **Top Global Navbar**: Shows campus location, food search, active cooking order pill, sound FX toggle, live cart badge, and user avatar.
-* **Collapsible Sidebar**: Gives categorized 1-click access to all 18 pages with badge counts.
-* **Bottom Quick-Page Dock**: Sticky bottom bar allowing instantaneous switching between any of the 18 pages.
-* **Tactile Web Audio Feedback**: Realistic audio clicks, add-to-tray pops, and order placement fanfares generated via the Web Audio API.
+* **Collapsible Sidebar**: Gives categorized 1‑click access to all 18 pages with badge counts.
+* **Bottom Quick‑Page Dock**: Sticky bottom bar allowing instantaneous switching between any of the 18 pages.
+* **Tactile Web Audio Feedback**: Realistic audio clicks, add‑to‑tray pops, and order placement fanfares generated via the Web Audio API.
 * **Print Bill Feature**: Clicking *"Print Cafeteria Receipt"* triggers a clean, professional paper invoice.
