@@ -1,0 +1,43 @@
+# ── Node / npm ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Environment variables (never commit secrets) ─────────────
+.env
+.env.local
+.env.*.local
+
+# ── Build output ─────────────────────────────────────────────
+dist/
+build/
+.vite/
+
+# ── OS generated files ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor folders ───────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Python (old backend – cleaned up) ───────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/

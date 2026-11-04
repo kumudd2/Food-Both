@@ -6,7 +6,7 @@ echo ===================================================================
 echo.
 
 where python >nul 2>&1
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
     echo [ERROR] Python was not found in your system PATH.
     echo.
     echo Please install Python 3.9+ from:

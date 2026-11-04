@@ -1,0 +1,55 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: "#ab3500",
+        secondary: "#27657c",
+        "primary-container": "#ff6b35",
+        "on-primary": "#ffffff",
+        "on-primary-container": "#5f1900",
+        "surface": "#f8f9fa",
+        "on-surface": "#191c1d",
+        "surface-container": "#edeeef",
+        "surface-container-low": "#f3f4f5",
+        "surface-container-lowest": "#ffffff",
+        "surface-container-high": "#e1e3e4",
+        "surface-container-highest": "#e1e3e4",
+        "primary-fixed": "#ffdbd0",
+        "on-primary-fixed": "#390c00",
+        "secondary-fixed": "#bce9ff",
+        "on-secondary-fixed": "#001f29",
+        "tertiary": "#006a62",
+        "on-tertiary": "#ffffff",
+        "error": "#ba1a1a",
+        "on-error": "#ffffff",
+      },
+      spacing: {
+        "space-xs": "0.25rem",
+        "space-sm": "0.5rem",
+        "space-md": "1rem",
+        "space-lg": "1.5rem",
+        "space-xl": "2.5rem",
+        margin: "1.25rem",
+        gutter: "1rem",
+      },
+      borderRadius: {
+        DEFAULT: "0.25rem",
+        lg: "0.5rem",
+        xl: "0.75rem",
+        full: "9999px",
+      },
+      fontFamily: {
+        display: ["'Plus Jakarta Sans'", "sans-serif"],
+        headline: ["'Plus Jakarta Sans'", "sans-serif"],
+        label: ["'Plus Jakarta Sans'", "sans-serif"],
+        body: ["Inter", "sans-serif"],
+      },
+    },
+  },
+  plugins: [],
+};
