@@ -1,11 +1,13 @@
 @echo off
-title Smart Cafeteria - Campus Pre-Order Dining Web Platform
+title FoodBooth - Campus Pre-Order Web App
 echo ========================================================
-echo   Launching Smart Cafeteria Web Platform (18 Pages)
+echo   Launching FoodBooth Production Web App
 echo ========================================================
 echo.
-echo Opening index.html in your default web browser...
-start "" "%~dp0index.html"
-echo Web App launched successfully!
+echo Starting web server on http://localhost:3000 ...
+start "" node serve.js
+timeout /t 2 /nobreak >nul
+start "" http://localhost:3000
+echo FoodBooth is live at http://localhost:3000!
 echo.
 pause

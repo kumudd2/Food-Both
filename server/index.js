@@ -2,14 +2,12 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db');
-const errorHandler = require('./middleware/errorHandler');
-
 // Load env variables
 dotenv.config();
 
-// Connect to MongoDB
-connectDB();
+// PostgreSQL connection pool
+const db = require('./config/db');
+const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 

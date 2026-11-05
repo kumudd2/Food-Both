@@ -1,0 +1,118 @@
+================================================================================
+  FOODBOOTH - POSTGRESQL DATABASE SETUP INSTRUCTIONS (pgAdmin 4 ONLY)
+================================================================================
+
+This guide walks you step-by-step through setting up the FoodBooth database
+from scratch completely using the pgAdmin 4 graphical user interface (GUI).
+No command line or PowerShell needed!
+
+--------------------------------------------------------------------------------
+STEP 1: INSTALL POSTGRESQL & pgAdmin 4
+--------------------------------------------------------------------------------
+
+1. Download the official PostgreSQL Windows installer from:
+   https://www.postgresql.org/download/windows/
+
+2. Run the installer (.exe):
+   - Keep all default components checked (PostgreSQL Server, pgAdmin 4,
+     Command Line Tools).
+   - Port: Keep default 5432.
+   - Password: Set a master password for user 'postgres' (e.g. 'postgres' or 'admin123').
+     --> REMEMBER THIS PASSWORD! You will use it to log into pgAdmin.
+
+3. Complete the wizard. pgAdmin 4 is now installed on your computer.
+
+--------------------------------------------------------------------------------
+STEP 2: OPEN pgAdmin 4 & CONNECT
+--------------------------------------------------------------------------------
+
+1. Open your Windows Start Menu, search for "pgAdmin 4", and launch it.
+2. When pgAdmin opens in your browser or desktop window, look at the left sidebar
+   under "Servers".
+3. Double-click "PostgreSQL 16" (or your installed version number).
+4. Enter the master password you created during installation and check
+   "Save Password", then click OK.
+
+--------------------------------------------------------------------------------
+STEP 3: CREATE THE "foodbooth" DATABASE
+--------------------------------------------------------------------------------
+
+1. In the left sidebar of pgAdmin, find and right-click on "Databases".
+2. Hover over "Create" and click "Database...".
+3. In the popup window that appears:
+   - Database: Type "foodbooth" (all lowercase, no spaces).
+   - Owner: Leave as "postgres".
+4. Click the "Save" button at the bottom right.
+5. You will now see "foodbooth" appear under the Databases list in the left sidebar.
+
+--------------------------------------------------------------------------------
+STEP 4: OPEN THE QUERY TOOL ON "foodbooth"
+--------------------------------------------------------------------------------
+
+1. In the left sidebar, click on your newly created "foodbooth" database to select it.
+2. In the top menu bar, click on "Tools" -> "Query Tool".
+   (Alternatively: Right-click "foodbooth" -> click "Query Tool").
+3. A blank SQL editor tab will open on the right side of the screen.
+
+--------------------------------------------------------------------------------
+STEP 5: RUN THE SCHEMA (schema_postgres.sql)
+--------------------------------------------------------------------------------
+
+1. In the Query Tool toolbar, click the "Open File" folder icon (or press Ctrl + O).
+2. Browse to this project's database folder:
+   c:\Users\Manthan\Desktop\Kumud -\Food-Both\database\schema_postgres.sql
+   (If files don't show up, change the file type dropdown at the bottom from "*.sql" to "All files *.*").
+3. Select "schema_postgres.sql" and click "Select" / "Open".
+4. The entire schema code will now load into the editor window.
+5. Click the "Execute / Refresh" button (the Play triangle icon ▶ at the top, or press F5).
+6. Look at the "Data Output" or "Messages" pane at the bottom:
+   You should see: "Query returned successfully in X msec."
+   --> All 28 tables, ENUMs, and indexes are now created!
+
+--------------------------------------------------------------------------------
+STEP 6: RUN THE SEED DATA (seed_postgres.sql)
+--------------------------------------------------------------------------------
+
+1. In the same Query Tool window, click the "Open File" folder icon again (Ctrl + O).
+2. Select "seed_postgres.sql" from:
+   c:\Users\Manthan\Desktop\Kumud -\Food-Both\database\seed_postgres.sql
+3. Click "Select" / "Open".
+4. Click the "Execute" button (Play triangle icon ▶, or press F5).
+5. The Messages pane will display:
+   "Query returned successfully in X msec."
+   --> All campus dishes, students, staff, vouchers, and wallets are now loaded!
+
+--------------------------------------------------------------------------------
+STEP 7: VERIFY YOUR DATA IN pgAdmin
+--------------------------------------------------------------------------------
+
+You can easily browse your live tables visually without writing any code:
+
+1. In the left sidebar, expand:
+   foodbooth -> Schemas -> public -> Tables
+2. You will see all ~28 tables listed (menu_items, users, wallets, orders, etc.).
+3. Right-click on the "menu_items" table:
+   -> Hover over "View/Edit Data"
+   -> Click "All Rows"
+   A spreadsheet view will open showing all dishes (Gourmet Burger, Masala Dosa,
+   Special Thali, etc.) with prices, calories, and stock status!
+4. Right-click on the "users" table:
+   -> "View/Edit Data" -> "All Rows"
+   You will see your student and kitchen staff accounts.
+
+Your PostgreSQL database is now 100% setup and ready for use!
+
+--------------------------------------------------------------------------------
+HOW TO RESET / WIPE CLEAN IN pgAdmin (IF EVER NEEDED)
+--------------------------------------------------------------------------------
+
+If you ever want to reset the database and start fresh:
+1. In the left sidebar, right-click on "foodbooth".
+2. Click "Disconnect Database..."
+3. Right-click on "foodbooth" again -> click "Delete/Drop".
+4. Confirm deletion.
+5. Repeat Step 3, 5, and 6 to recreate it fresh!
+
+================================================================================
+END OF INSTRUCTIONS
+================================================================================

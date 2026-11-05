@@ -1,0 +1,26 @@
+{
+  "name": "foodbooth",
+  "version": "2.0.0",
+  "description": "FoodBooth - Production Campus Dining Hall Pre-Ordering Web App",
+  "main": "serve.js",
+  "scripts": {
+    "start": "node serve.js",
+    "build": "npm run build --prefix client",
+    "dev": "npm run dev --prefix client",
+    "server": "npm start --prefix server"
+  },
+  "keywords": [
+    "foodbooth",
+    "campus-dining",
+    "kds",
+    "pre-order",
+    "react",
+    "tailwind"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^18.0.9",
+    "pg": "^8.23.1"
+  }
+}

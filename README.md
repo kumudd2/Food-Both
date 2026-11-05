@@ -1,177 +1,95 @@
-# FoodBooth 🍔 – Campus Pre-Order Web App
+# FoodBooth - Campus Dining Pre-Order & Kitchen KDS Platform
 
-A full-stack **campus food pre-ordering system** built with:
-
-- **Frontend**: React (Vite) + Tailwind CSS + React Router + Axios  
-- **Backend**: Node.js + Express + MongoDB (Mongoose)  
-- **Auth**: JWT + bcrypt
+A modern, production-grade campus dining hall pre-ordering and kitchen management web application.
 
 ---
 
-## 📂 Project Structure
+## 📂 Project Architecture
 
 ```
-foodbooth/
-├── client/          # React (Vite) frontend
+Food-Both/
+├── client/              # React 18 + Vite + Tailwind CSS Frontend
 │   ├── src/
-│   │   ├── components/   # Reusable UI components
-│   │   ├── pages/        # Route-level page components
-│   │   ├── routes/       # React Router config
-│   │   └── services/     # Axios API layer
-│   ├── package.json
-│   ├── tailwind.config.js
-│   └── vite.config.ts
-└── server/          # Express backend
-    ├── config/      # DB connection
-    ├── controllers/ # Route handler logic
-    ├── middleware/  # Auth & error handling
-    ├── models/      # Mongoose schemas
-    ├── routes/      # Express routers
-    ├── seed/        # Database seed script
-    ├── .env.example
-    └── index.js
+│   │   ├── components/  # Modular UI & Portal Components
+│   │   │   ├── AdminPortal.jsx         # Kitchen KDS, Stock, Sales & Audit Log
+│   │   │   ├── CartDrawer.jsx          # Slide-out food tray & checkout
+│   │   │   ├── DishModal.jsx           # Customizer with portion & addons
+│   │   │   ├── Icons.jsx               # Monochrome SVG line icons
+│   │   │   ├── MenuScreen.jsx          # Dynamic 1–6 column responsive catalog
+│   │   │   ├── Navbar.jsx              # Responsive header with wallet pill
+│   │   │   ├── OrderTrackerScreen.jsx  # Live 5-stage timeline & digital QR pass
+│   │   │   └── WalletScreen.jsx        # RFID Meal Card & UPI top-up
+│   │   ├── data/
+│   │   │   └── mockData.js             # Initial state, dishes, counters & coupons
+│   │   ├── App.jsx                     # Root state management & localStorage sync
+│   │   └── index.css                   # Custom animations & responsive utilities
+│   ├── public/                         # Food photography & local static assets
+│   ├── dist/                           # Production-compiled client bundle
+│   └── package.json
+│
+├── server/              # Express + MongoDB REST API Backend
+│   ├── config/          # MongoDB connection
+│   ├── controllers/     # Route business logic
+│   ├── middleware/      # Auth & error handling
+│   ├── models/          # Data schemas (User, Food, Order, Feedback)
+│   ├── routes/          # Express route definitions
+│   ├── seed/            # Seed script
+│   └── package.json
+│
+├── database/            # SQL Schemas & Database Artifacts
+│   ├── cafeteria.db     # SQLite local database
+│   ├── schema_sqlite.sql
+│   ├── schema_postgres.sql
+│   ├── seed_data.sql
+│   └── build_database.cs
+│
+├── legacy_v1/           # Archived Legacy Monolithic Prototype
+│   ├── index.html       # Original single-file prototype
+│   ├── assets/          # Legacy CDN script bundles
+│   ├── css/
+│   └── js/
+│
+├── launch.bat           # 1-Click Windows Production App Launcher
+├── serve.js             # High-speed static SPA server (Port 3000)
+└── package.json         # Unified root scripts
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-### Prerequisites
-
-- [Node.js 20+](https://nodejs.org)
-- [MongoDB](https://www.mongodb.com) (local or Atlas)
-- Git
-
----
-
-### 1️⃣ Clone the repo
-
+### 1. Launch Production Web App
+Double-click `launch.bat` or run:
 ```bash
-git clone https://github.com/kumudd2/Food-Both.git
-cd Food-Both
+npm start
 ```
+Open **`http://localhost:3000`** in your browser.
 
----
-
-### 2️⃣ Backend Setup
-
+### 2. Frontend Development
 ```bash
-cd server
-npm install
-cp .env.example .env
-# Edit .env with your MONGO_URI, JWT_SECRET, and PORT
+npm run dev
 ```
 
-**`.env` values:**
-
-| Key | Example |
-|-----|---------|
-| `PORT` | `5000` |
-| `MONGO_URI` | `mongodb://localhost:27017/foodbooth` |
-| `JWT_SECRET` | `your-strong-secret-key` |
-
-**Seed the database (optional but recommended):**
-
+### 3. Build Production Bundle
 ```bash
-node seed/seedData.js
+npm run build
 ```
 
-This creates:
-- 👤 Admin: `admin@foodbooth.edu` / `admin123`
-- 🎓 Student: `jdoe24@university.edu` / `student123`
-- 🍔 6 menu items, inventory, sample orders & feedback
-
-**Start the server:**
-
-```bash
-npm run dev    # development (nodemon)
-npm start      # production
-```
-
-API available at: `http://localhost:5000`
-
 ---
 
-### 3️⃣ Frontend Setup
+## 💡 Key Features
 
-```bash
-cd client
-npm install
-npm run dev    # Vite dev server
-```
+### Student Dining Experience
+- **Fluid Edge-to-Edge Grid**: Automatically reflows from 1 column on phones to 6 columns on widescreen desktop monitors.
+- **Search & Filters**: Instant search, category tabs (Breakfast, Mains, Chaat, Beverages, etc.), dietary toggles (Veg / Non-Veg / Vegan), and sorting.
+- **Dish Customizer**: Adjust portion sizes, choose spice levels, and select add-on upgrades.
+- **Slide-Out Tray**: Coupon vouchers (`CAMPUS50`, `STUDENT10`), pickup time slot selection, payment method choices.
+- **Persistent Floating Tray Button**: Corner-anchored FAB (`fixed bottom-4 right-4 sm:bottom-6 sm:right-6`) that hovers above content without page scrolling.
+- **Live Order Tracker**: 5-stage preparation timeline (`Placed` → `Confirmed` → `Preparing` → `Ready` → `Collected`), digital QR pickup pass, and 4-digit verification PIN.
+- **Campus Dining Wallet**: Digital RFID meal card with cardholder credentials, quick UPI top-up (+₹100, +₹200, +₹500, +₹1000), loyalty pass subscriptions, and transaction audit log.
 
-App available at: `http://localhost:5173`  
-(Vite automatically proxies `/api` requests to the backend)
-
----
-
-## 📡 API Endpoints
-
-### Auth
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| POST | `/api/auth/register` | Register new user | ✖ |
-| POST | `/api/auth/login` | Login & get JWT | ✖ |
-| GET | `/api/auth/me` | Get logged-in user | ✅ |
-
-### Menu
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/menu` | List all menu items | ✖ |
-| GET | `/api/menu/:id` | Get single item | ✖ |
-| POST | `/api/menu` | Create item (admin) | ✅ |
-| PUT | `/api/menu/:id` | Update item (admin) | ✅ |
-| DELETE | `/api/menu/:id` | Delete item (admin) | ✅ |
-
-### Orders
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/orders/my` | Get my orders | ✅ |
-| GET | `/api/orders` | All orders (admin) | ✅ |
-| POST | `/api/orders` | Place new order | ✅ |
-| PATCH | `/api/orders/:id/status` | Update status (admin) | ✅ |
-
-### Feedback
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/feedback` | List all feedback | ✅ |
-| POST | `/api/feedback` | Submit feedback | ✅ |
-| DELETE | `/api/feedback/:id` | Delete feedback | ✅ |
-
-### Inventory
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/inventory` | View stock (admin) | ✅ |
-| POST | `/api/inventory` | Upsert stock (admin) | ✅ |
-| PATCH | `/api/inventory/:id` | Update quantity (admin) | ✅ |
-
----
-
-## 🎨 Design
-
-Matches the **FoodBooth design system**:
-- Color palette: burnt orange primary (`#ab3500`), teal secondary (`#27657c`)
-- Fonts: **Plus Jakarta Sans** (headings) + **Inter** (body)
-- Icons: Material Symbols Outlined
-- Responsive: mobile → tablet → desktop
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, Vite 5, Tailwind CSS 3 |
-| Routing | React Router v6 |
-| HTTP client | Axios |
-| Backend | Node.js, Express 4 |
-| Database | MongoDB, Mongoose 7 |
-| Auth | JWT, bcrypt |
-| Validation | express-validator |
-| Dev tools | nodemon |
-
----
-
-## 📄 License
-
-MIT
+### Kitchen Staff & Administration Console
+- **Kitchen KDS Kanban**: 3-column ticket pipeline (*New Incoming* → *Currently Cooking* → *Ready at Counter*) with counter filtering and stage advancement.
+- **Stock & Menu Controls**: Instant **In Stock / Sold Out** switch synced with student menu, full **Add Dish Modal**, inline editing, and deletion.
+- **Daily Sales & Analytics**: Gross Revenue KPI cards, Counter 1/2/3 revenue distribution bars, rush hour volume distribution, and top-selling dishes leaderboard.
+- **Orders Audit Log**: Comprehensive ticket history, multi-status filters, customer roll numbers, item details modal, and **1-click Export to CSV**.
