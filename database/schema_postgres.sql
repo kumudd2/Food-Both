@@ -22,7 +22,7 @@ CREATE TABLE users (
     role           user_role    NOT NULL DEFAULT 'student',
     full_name      VARCHAR(120) NOT NULL,
     email          VARCHAR(160) NOT NULL UNIQUE,
-    phone          VARCHAR(15)  UNIQUE,
+    phone          VARCHAR(50)  UNIQUE,
     password_hash  TEXT         NOT NULL,
     avatar_url     TEXT,
     is_active      BOOLEAN      NOT NULL DEFAULT TRUE,   -- block / unblock
@@ -141,7 +141,7 @@ CREATE TABLE cafeteria_settings (
     id                 SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),  -- single row
     name               VARCHAR(120) NOT NULL,
     address            TEXT,
-    contact_phone      VARCHAR(15),
+    contact_phone      VARCHAR(50),
     tax_percent        NUMERIC(5,2) NOT NULL DEFAULT 5.00,
     is_open            BOOLEAN NOT NULL DEFAULT TRUE,   -- drives "Cafeteria Closed" page
     slot_length_mins   INT NOT NULL DEFAULT 15,
@@ -213,8 +213,8 @@ CREATE TABLE orders (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_number     VARCHAR(20) NOT NULL UNIQUE
                      DEFAULT ('ORD' || nextval('order_number_seq')),
-    user_id          UUID NOT NULL REFERENCES users(id),
-    pickup_slot_id   UUID NOT NULL REFERENCES pickup_slots(id),
+    user_id          UUID REFERENCES users(id),
+    pickup_slot_id   UUID REFERENCES pickup_slots(id),
     status           order_status NOT NULL DEFAULT 'placed',
     subtotal         NUMERIC(10,2) NOT NULL,
     discount_amount  NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -240,7 +240,7 @@ CREATE INDEX idx_orders_slot   ON orders(pickup_slot_id);
 CREATE TABLE order_items (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id       UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    item_id        UUID NOT NULL REFERENCES menu_items(id),
+    item_id        UUID REFERENCES menu_items(id),
     item_name      VARCHAR(120) NOT NULL,           -- snapshot
     variant_label  VARCHAR(40),
     addons         JSONB NOT NULL DEFAULT '[]',     -- [{name, price}]

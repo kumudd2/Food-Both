@@ -258,7 +258,7 @@ const server = http.createServer(async (req, res) => {
 
       const ordersRes = await pool.query(`
         SELECT 
-          o.id,
+          o.id as "orderUuid",
           o.order_number as "id",
           o.pickup_qr_token as "qrToken",
           COALESCE(o.notes, 'Counter 1') as "counter",
@@ -282,7 +282,7 @@ const server = http.createServer(async (req, res) => {
         ordersRes.rows.map(async (ord) => {
           const itemsRes = await pool.query(
             'SELECT item_name as name, quantity, unit_price as price FROM order_items WHERE order_id = $1;',
-            [ord.id]
+            [ord.orderUuid]
           );
           return {
             ...ord,
@@ -411,15 +411,15 @@ const server = http.createServer(async (req, res) => {
       const walletUpdate = await pool.query(`
         UPDATE wallets 
         SET balance = balance + $1, reward_points = reward_points + round($1 * 0.05)
-        RETURNING balance, reward_points;
+        RETURNING user_id, balance, reward_points;
       `, [amt]);
 
       const newBal = walletUpdate.rows[0]?.balance || 580;
 
       await pool.query(`
-        INSERT INTO wallet_transactions (txn_type, amount, balance_after, reference)
-        VALUES ('topup', $1, $2, 'UPI Instant Top-Up');
-      `, [amt, newBal]);
+        INSERT INTO wallet_transactions (user_id, txn_type, amount, balance_after, reference)
+        VALUES ($1, 'topup', $2, $3, 'UPI Instant Top-Up');
+      `, [walletUpdate.rows[0]?.user_id || '11111111-1111-1111-1111-111111111111', amt, newBal]);
 
       return sendJson(res, 200, { dbConnected: true, balance: Number(newBal) });
     } catch (err) {
