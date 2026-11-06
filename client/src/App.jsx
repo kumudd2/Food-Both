@@ -9,6 +9,7 @@ import WalletScreen from './components/WalletScreen';
 import AdminPortal from './components/AdminPortal';
 import AuthModal from './components/AuthModal';
 import MobileShareModal from './components/MobileShareModal';
+import ProfileModal from './components/ProfileModal';
 import { BagIcon, ArrowRightIcon } from './components/Icons';
 import {
   INITIAL_FOOD_ITEMS,
@@ -70,6 +71,7 @@ export default function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [isMobileShareOpen, setIsMobileShareOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState({
     checked: false,
     connected: false,
@@ -217,6 +219,15 @@ export default function App() {
     setRole('student');
     setStudentTab('menu');
     showToast('Signed out successfully');
+  };
+
+  const handleUpdateProfile = (updatedUser) => {
+    if (updatedUser) {
+      const merged = { ...user, ...updatedUser };
+      setUser(merged);
+      localStorage.setItem('fb_user', JSON.stringify(merged));
+      showToast('Profile updated successfully');
+    }
   };
 
   const cartCount = useMemo(() => {
@@ -485,6 +496,7 @@ export default function App() {
         }}
         onSignOut={handleSignOut}
         onOpenMobileShare={() => setIsMobileShareOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
       />
 
       {/* Main Container with smooth fade transition on activeTab change */}
@@ -610,6 +622,14 @@ export default function App() {
       <MobileShareModal
         isOpen={isMobileShareOpen}
         onClose={() => setIsMobileShareOpen(false)}
+      />
+
+      {/* Campus Profile Details Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+        onUpdateProfile={handleUpdateProfile}
       />
 
       {/* Clean Animated Toast */}

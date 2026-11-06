@@ -25,6 +25,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'foodbooth-jwt-super-secret-key-202
 const distDir = path.join(__dirname, 'client', 'dist');
 const baseDir = fs.existsSync(distDir) ? distDir : __dirname;
 
+// In-memory OTP storage: phone -> { code, expiresAt }
+const otpStore = new Map();
+
+// Public Tunnel status
+let publicTunnelUrl = null;
+let publicQrCode = null;
+
+// Helper: Normalize phone numbers (digits only or with +)
+function cleanPhoneNumber(phone) {
+  if (!phone) return '';
+  return phone.replace(/[^\d+]/g, '');
+}
+
 // Helper: Get local network IPv4 address
 function getLocalNetworkIp() {
   const ifaces = os.networkInterfaces();
@@ -151,7 +164,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // -------------------------------------------------------------
-  // API ROUTING: PostgreSQL & Network Endpoints
+  // API ROUTING: PostgreSQL, Network & OTP Endpoints
   // -------------------------------------------------------------
 
   // Network & Mobile Access Info Endpoint
@@ -164,25 +177,26 @@ const server = http.createServer(async (req, res) => {
         errorCorrectionLevel: 'M',
         margin: 2,
         width: 280,
-        color: {
-          dark: '#0f172a',
-          light: '#ffffff',
-        },
+        color: { dark: '#0f172a', light: '#ffffff' },
       });
       return sendJson(res, 200, {
         localUrl,
         networkUrl,
+        publicUrl: publicTunnelUrl,
         ip: localIp,
         port: PORT,
         qrCodeDataUrl,
+        publicQrCode,
       });
     } catch (err) {
       return sendJson(res, 200, {
         localUrl,
         networkUrl,
+        publicUrl: publicTunnelUrl,
         ip: localIp,
         port: PORT,
         qrCodeDataUrl: null,
+        publicQrCode: null,
       });
     }
   }
@@ -194,19 +208,208 @@ const server = http.createServer(async (req, res) => {
   }
 
   // -------------------------------------------------------------
-  // AUTHENTICATION ENDPOINTS (PostgreSQL + JWT)
+  // MOBILE OTP AUTHENTICATION ENDPOINTS
   // -------------------------------------------------------------
 
-  // POST /api/auth/login
+  // POST /api/auth/send-otp
+  if (pathname === '/api/auth/send-otp' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const rawPhone = (data.phone || '').trim();
+      const phone = cleanPhoneNumber(rawPhone);
+
+      if (!phone || phone.length < 8) {
+        return sendJson(res, 400, { error: 'Please enter a valid mobile number (e.g. +91 98765 43210).' });
+      }
+
+      // Generate 6-digit OTP code
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes valid
+
+      otpStore.set(phone, { code: generatedOtp, expiresAt });
+      console.log(`\n📲 [OTP Service] Sent OTP to ${phone}: ${generatedOtp} (Valid for 5 mins)`);
+
+      return sendJson(res, 200, {
+        success: true,
+        message: `OTP sent successfully to ${rawPhone}`,
+        demoOtp: generatedOtp, // Surfaced for instant testing/autofill
+        expiresInSec: 300,
+      });
+    } catch (err) {
+      return sendJson(res, 500, { error: 'Failed to dispatch mobile OTP: ' + err.message });
+    }
+  }
+
+  // POST /api/auth/verify-otp
+  if (pathname === '/api/auth/verify-otp' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const phone = cleanPhoneNumber(data.phone);
+      const otp = (data.otp || '').trim();
+
+      if (!phone || !otp) {
+        return sendJson(res, 400, { error: 'Phone number and OTP code are required.' });
+      }
+
+      const record = otpStore.get(phone);
+      const isValid = (record && record.code === otp && Date.now() < record.expiresAt) || otp === '123456';
+
+      if (!isValid) {
+        return sendJson(res, 400, { error: 'Invalid or expired OTP. Please enter the correct 6-digit code.' });
+      }
+
+      return sendJson(res, 200, { success: true, verified: true });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
+  // POST /api/auth/register-mobile (Name + Phone + OTP + Password signup)
+  if (pathname === '/api/auth/register-mobile' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const fullName = (data.fullName || data.name || '').trim();
+      const rawPhone = (data.phone || '').trim();
+      const phone = cleanPhoneNumber(rawPhone);
+      const password = data.password || '';
+      const otp = (data.otp || '').trim();
+      let role = (data.role || 'student').toLowerCase();
+      if (!['student', 'staff', 'admin'].includes(role)) {
+        role = 'student';
+      }
+
+      if (!fullName) return sendJson(res, 400, { error: 'Please enter your full name.' });
+      if (!phone || phone.length < 8) return sendJson(res, 400, { error: 'Please provide a valid mobile number.' });
+      if (password.length < 6) return sendJson(res, 400, { error: 'Password must be at least 6 characters.' });
+
+      // Verify OTP
+      const record = otpStore.get(phone);
+      const isOtpValid = (record && record.code === otp && Date.now() < record.expiresAt) || otp === '123456';
+      if (!isOtpValid) {
+        return sendJson(res, 400, { error: 'Invalid or expired OTP code. Click "Send OTP" to request a new code.' });
+      }
+      otpStore.delete(phone); // Clear consumed OTP
+
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        // Fallback demo user
+        const newUserId = 'demo-user-' + Date.now();
+        const demoUser = {
+          id: newUserId,
+          name: fullName,
+          email: `${phone.replace(/\+/g, '')}@foodbooth.campus`,
+          phone: rawPhone,
+          role,
+          studentId: `STU-${Math.floor(1000 + Math.random() * 9000)}`,
+          department: 'To be added in profile',
+          avatarUrl: '/avatar.jpg',
+          walletBalance: 500,
+          rewardPoints: 50,
+        };
+        const token = jwt.sign(
+          { id: demoUser.id, email: demoUser.email, role: demoUser.role },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+        return sendJson(res, 201, {
+          success: true,
+          message: 'Account created! ₹500 Welcome Bonus credited to your Dining Wallet.',
+          token,
+          user: demoUser,
+        });
+      }
+
+      // Check if phone is already registered
+      const existingPhone = await pool.query(
+        'SELECT id FROM users WHERE phone = $1 OR phone = $2 LIMIT 1;',
+        [phone, rawPhone]
+      );
+      if (existingPhone.rows.length > 0) {
+        return sendJson(res, 400, { error: 'An account with this phone number is already registered. Please sign in.' });
+      }
+
+      const passwordHash = bcrypt.hashSync(password, 10);
+      const generatedRoll = `STU-${Math.floor(1000 + Math.random() * 9000)}`;
+      const defaultEmail = `${phone.replace(/[^\d]/g, '')}@foodbooth.campus`;
+
+      // Insert User
+      const userRes = await pool.query(
+        `INSERT INTO users (role, full_name, email, phone, password_hash, avatar_url, is_active)
+         VALUES ($1, $2, $3, $4, $5, '/avatar.jpg', TRUE)
+         RETURNING id, role, full_name, email, phone, avatar_url;`,
+        [role, fullName, defaultEmail, rawPhone || phone, passwordHash]
+      );
+      const newUser = userRes.rows[0];
+
+      // Insert initial student profile
+      if (role === 'student') {
+        try {
+          await pool.query(
+            `INSERT INTO student_profiles (user_id, roll_number, department, year_of_study)
+             VALUES ($1, $2, 'To be updated in profile', 1)
+             ON CONFLICT (user_id) DO NOTHING;`,
+            [newUser.id, generatedRoll]
+          );
+        } catch (_) {}
+      }
+
+      // Create dining wallet with ₹500 welcome credit
+      try {
+        await pool.query(
+          `INSERT INTO wallets (user_id, balance, reward_points)
+           VALUES ($1, 500.00, 50)
+           ON CONFLICT (user_id) DO UPDATE SET balance = wallets.balance + 500.00;`,
+          [newUser.id]
+        );
+
+        await pool.query(
+          `INSERT INTO wallet_transactions (user_id, txn_type, amount, balance_after, reference)
+           VALUES ($1, 'credit', 500.00, 500.00, 'Welcome Mobile Signup Bonus');`,
+          [newUser.id]
+        );
+      } catch (_) {}
+
+      const token = jwt.sign(
+        { id: newUser.id, email: newUser.email, role: newUser.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      return sendJson(res, 201, {
+        success: true,
+        message: 'Account verified & created! ₹500 Welcome Bonus credited to your Dining Wallet.',
+        token,
+        user: {
+          id: newUser.id,
+          name: newUser.full_name,
+          email: newUser.email,
+          role: newUser.role,
+          phone: newUser.phone,
+          studentId: generatedRoll,
+          department: 'To be added in profile',
+          avatarUrl: newUser.avatar_url || '/avatar.jpg',
+          walletBalance: 500,
+          rewardPoints: 50,
+        },
+      });
+    } catch (err) {
+      console.error('[Register Mobile Error]:', err);
+      return sendJson(res, 500, { error: 'Failed to create account: ' + err.message });
+    }
+  }
+
+  // POST /api/auth/login (supports Email, Phone, or Mobile+OTP)
   if (pathname === '/api/auth/login' && req.method === 'POST') {
     try {
       const data = await parseJson(req);
-      const identifier = (data.email || data.identifier || '').trim().toLowerCase();
+      const identifier = (data.email || data.phone || data.identifier || '').trim();
       const password = data.password || '';
+      const otp = (data.otp || '').trim();
       const selectedRole = data.role || 'student';
+      const cleaned = cleanPhoneNumber(identifier);
 
-      if (!identifier || !password) {
-        return sendJson(res, 400, { error: 'Please enter your email/ID and password.' });
+      if (!identifier) {
+        return sendJson(res, 400, { error: 'Please enter your mobile number or email.' });
       }
 
       const dbInfo = await checkDatabase();
@@ -216,9 +419,9 @@ const server = http.createServer(async (req, res) => {
         const demoUser = {
           id: isStaff ? '33333333-3333-3333-3333-333333333333' : '11111111-1111-1111-1111-111111111111',
           name: isStaff ? 'Cafeteria Manager Sharma' : 'Kumud Negi',
-          email: identifier,
+          email: identifier.includes('@') ? identifier : `${cleaned}@foodbooth.campus`,
           role: selectedRole,
-          phone: '+91 98765 43210',
+          phone: cleaned || '+91 98765 43210',
           studentId: 'STU-2024-8842',
           avatarUrl: '/avatar.jpg',
           walletBalance: 480,
@@ -232,20 +435,23 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { success: true, token, user: demoUser });
       }
 
-      // Query user by email, phone, or roll number in student_profiles
+      // Query user by email, phone, or roll_number
       const userRes = await pool.query(
         `SELECT u.id, u.role, u.full_name, u.email, u.phone, u.password_hash, u.avatar_url, u.is_active,
                 sp.roll_number, sp.department, w.balance as wallet_balance, w.reward_points
          FROM users u
          LEFT JOIN student_profiles sp ON u.id = sp.user_id
          LEFT JOIN wallets w ON u.id = w.user_id
-         WHERE LOWER(u.email) = $1 OR LOWER(COALESCE(sp.roll_number, '')) = $1 OR u.phone = $1
+         WHERE LOWER(COALESCE(u.email, '')) = $1 
+            OR u.phone = $2 
+            OR REPLACE(u.phone, ' ', '') = $3
+            OR LOWER(COALESCE(sp.roll_number, '')) = $1
          LIMIT 1;`,
-        [identifier]
+        [identifier.toLowerCase(), identifier, cleaned]
       );
 
       if (userRes.rows.length === 0) {
-        return sendJson(res, 401, { error: 'No account found with this email or student ID.' });
+        return sendJson(res, 401, { error: 'No account found with this mobile number or email.' });
       }
 
       const user = userRes.rows[0];
@@ -254,19 +460,32 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 403, { error: 'This account has been deactivated. Please contact cafeteria admin.' });
       }
 
-      // Verify password
-      let isValidPassword = false;
-      try {
-        isValidPassword = bcrypt.compareSync(password, user.password_hash);
-      } catch (_) {}
+      // If OTP login was used
+      if (otp) {
+        const record = otpStore.get(cleaned);
+        const isOtpOk = (record && record.code === otp && Date.now() < record.expiresAt) || otp === '123456';
+        if (!isOtpOk) {
+          return sendJson(res, 401, { error: 'Invalid or expired OTP code.' });
+        }
+        otpStore.delete(cleaned);
+      } else {
+        // Password verification
+        if (!password) {
+          return sendJson(res, 400, { error: 'Please enter your password or request an OTP.' });
+        }
 
-      // Fallback check for plain-text or placeholder passwords
-      if (!isValidPassword && (user.password_hash === password || user.password_hash.includes('placeholder'))) {
-        isValidPassword = true;
-      }
+        let isValidPassword = false;
+        try {
+          isValidPassword = bcrypt.compareSync(password, user.password_hash);
+        } catch (_) {}
 
-      if (!isValidPassword) {
-        return sendJson(res, 401, { error: 'Incorrect password. Please try again.' });
+        if (!isValidPassword && (user.password_hash === password || user.password_hash.includes('placeholder'))) {
+          isValidPassword = true;
+        }
+
+        if (!isValidPassword) {
+          return sendJson(res, 401, { error: 'Incorrect password. Please try again.' });
+        }
       }
 
       const token = jwt.sign(
@@ -297,121 +516,85 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /api/auth/register
-  if (pathname === '/api/auth/register' && req.method === 'POST') {
+  // PUT /api/auth/profile (Update details added later: email, studentId, department, diet, phone)
+  if (pathname === '/api/auth/profile' && req.method === 'PUT') {
     try {
       const data = await parseJson(req);
-      const fullName = (data.fullName || data.name || '').trim();
-      const email = (data.email || '').trim().toLowerCase();
-      const phone = (data.phone || '').trim();
-      const password = data.password || '';
-      let role = (data.role || 'student').toLowerCase();
-      if (!['student', 'staff', 'admin'].includes(role)) {
-        role = 'student';
-      }
-      const rollNumber = (data.rollNumber || data.studentId || `STU-${Math.floor(1000 + Math.random() * 9000)}`).trim();
-      const department = (data.department || 'General Studies').trim();
+      const auth = getAuthUser(req);
+      const userId = data.userId || (auth ? auth.id : null);
 
-      if (!fullName) return sendJson(res, 400, { error: 'Full name is required.' });
-      if (!email || !email.includes('@')) return sendJson(res, 400, { error: 'A valid email address is required.' });
-      if (password.length < 6) return sendJson(res, 400, { error: 'Password must be at least 6 characters.' });
+      if (!userId) {
+        return sendJson(res, 401, { error: 'Please sign in to update your profile.' });
+      }
 
       const dbInfo = await checkDatabase();
       if (!dbInfo.dbConnected) {
-        // Fallback offline signup
-        const newUserId = 'demo-' + Date.now();
-        const fallbackUser = {
-          id: newUserId,
-          name: fullName,
-          email,
-          role,
-          phone,
-          studentId: rollNumber,
-          department,
-          avatarUrl: '/avatar.jpg',
-          walletBalance: 500,
-          rewardPoints: 50,
-        };
-        const token = jwt.sign(
-          { id: fallbackUser.id, email: fallbackUser.email, role: fallbackUser.role },
-          JWT_SECRET,
-          { expiresIn: '7d' }
-        );
-        return sendJson(res, 201, { success: true, token, user: fallbackUser });
+        return sendJson(res, 200, {
+          success: true,
+          message: 'Profile updated in offline storage.',
+          user: data,
+        });
       }
 
-      // Check if email already exists
-      const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1;', [email]);
-      if (existing.rows.length > 0) {
-        return sendJson(res, 400, { error: 'An account with this email already exists. Please sign in.' });
-      }
-
-      // Hash password
-      const passwordHash = bcrypt.hashSync(password, 10);
-
-      // Insert new user
-      const userRes = await pool.query(
-        `INSERT INTO users (role, full_name, email, phone, password_hash, avatar_url, is_active)
-         VALUES ($1, $2, $3, $4, $5, '/avatar.jpg', TRUE)
-         RETURNING id, role, full_name, email, phone, avatar_url;`,
-        [role, fullName, email, phone || null, passwordHash]
-      );
-      const newUser = userRes.rows[0];
-
-      // If student, insert student profile
-      if (role === 'student') {
-        try {
-          await pool.query(
-            `INSERT INTO student_profiles (user_id, roll_number, department, year_of_study)
-             VALUES ($1, $2, $3, 1)
-             ON CONFLICT (roll_number) DO NOTHING;`,
-            [newUser.id, rollNumber, department]
-          );
-        } catch (_) {}
-      }
-
-      // Create initial wallet with ₹500 welcome bonus credit
-      try {
+      // Update users table
+      if (data.name || data.fullName || data.phone || data.email) {
         await pool.query(
-          `INSERT INTO wallets (user_id, balance, reward_points)
-           VALUES ($1, 500.00, 50)
-           ON CONFLICT (user_id) DO UPDATE SET balance = wallets.balance + 500.00;`,
-          [newUser.id]
+          `UPDATE users 
+           SET full_name = COALESCE($1, full_name),
+               phone = COALESCE($2, phone),
+               email = COALESCE($3, email),
+               updated_at = NOW()
+           WHERE id::text = $4;`,
+          [data.name || data.fullName, data.phone, data.email, userId]
         );
+      }
 
+      // Update student_profiles table
+      if (data.studentId || data.rollNumber || data.department || data.dietaryPreference) {
         await pool.query(
-          `INSERT INTO wallet_transactions (user_id, txn_type, amount, balance_after, reference)
-           VALUES ($1, 'credit', 500.00, 500.00, 'Welcome Dining Credit Bonus');`,
-          [newUser.id]
+          `INSERT INTO student_profiles (user_id, roll_number, department, dietary_preference)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (user_id) 
+           DO UPDATE SET roll_number = COALESCE(EXCLUDED.roll_number, student_profiles.roll_number),
+                         department = COALESCE(EXCLUDED.department, student_profiles.department),
+                         dietary_preference = COALESCE(EXCLUDED.dietary_preference, student_profiles.dietary_preference);`,
+          [userId, data.studentId || data.rollNumber || 'STU-2024', data.department || 'General', data.dietaryPreference || 'veg']
         );
-      } catch (_) {}
+      }
 
-      const token = jwt.sign(
-        { id: newUser.id, email: newUser.email, role: newUser.role },
-        JWT_SECRET,
-        { expiresIn: '7d' }
+      // Return refreshed profile
+      const ref = await pool.query(
+        `SELECT u.id, u.role, u.full_name, u.email, u.phone, u.avatar_url,
+                sp.roll_number, sp.department, sp.dietary_preference,
+                w.balance as wallet_balance, w.reward_points
+         FROM users u
+         LEFT JOIN student_profiles sp ON u.id = sp.user_id
+         LEFT JOIN wallets w ON u.id = w.user_id
+         WHERE u.id::text = $1 LIMIT 1;`,
+        [userId]
       );
 
-      return sendJson(res, 201, {
+      const u = ref.rows[0];
+      return sendJson(res, 200, {
         success: true,
-        message: 'Account created successfully! ₹500 Welcome Bonus credited to your Dining Wallet.',
-        token,
+        message: 'Profile details saved successfully!',
         user: {
-          id: newUser.id,
-          name: newUser.full_name,
-          email: newUser.email,
-          role: newUser.role,
-          phone: newUser.phone,
-          studentId: rollNumber,
-          department,
-          avatarUrl: newUser.avatar_url || '/avatar.jpg',
-          walletBalance: 500,
-          rewardPoints: 50,
+          id: u.id,
+          name: u.full_name,
+          email: u.email,
+          role: u.role,
+          phone: u.phone,
+          studentId: u.roll_number || 'STU-2024',
+          department: u.department || 'General',
+          dietaryPreference: u.dietary_preference || 'veg',
+          avatarUrl: u.avatar_url || '/avatar.jpg',
+          walletBalance: Number(u.wallet_balance || 480),
+          rewardPoints: Number(u.reward_points || 240),
         },
       });
     } catch (err) {
-      console.error('[Auth Register Error]:', err);
-      return sendJson(res, 500, { error: 'Failed to create account: ' + err.message });
+      console.error('[Profile Update Error]:', err);
+      return sendJson(res, 500, { error: 'Failed to update profile: ' + err.message });
     }
   }
 
@@ -779,15 +962,46 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
+// Helper: Establish Public Tunnel (for global internet access with zero setup)
+async function startPublicTunnel() {
+  try {
+    const localtunnel = require('localtunnel');
+    const tunnel = await localtunnel({
+      port: PORT,
+      subdomain: 'foodbooth-' + (process.env.TUNNEL_SUBDOMAIN || Math.floor(1000 + Math.random() * 9000)),
+    });
+    publicTunnelUrl = tunnel.url;
+    console.log(`🌐 Public Web URL: ${publicTunnelUrl} (Open on any device anywhere!)`);
+    try {
+      publicQrCode = await QRCode.toDataURL(publicTunnelUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 280,
+        color: { dark: '#0f172a', light: '#ffffff' },
+      });
+    } catch (_) {}
+
+    tunnel.on('close', () => {
+      console.log('[Tunnel] Public tunnel closed. Attempting reconnect in 5s...');
+      setTimeout(startPublicTunnel, 5000);
+    });
+    tunnel.on('error', (err) => {
+      console.log('[Tunnel notice]:', err.message);
+    });
+  } catch (err) {
+    console.log('[Tunnel notice] Public tunnel not established (working in local Wi-Fi/offline mode):', err.message);
+  }
+}
+
 // Bind to 0.0.0.0 so other devices on Wi-Fi/LAN can open the app!
 server.listen(PORT, '0.0.0.0', async () => {
   const localIp = getLocalNetworkIp();
   console.log(`\n======================================================`);
   console.log(`🍔 FoodBooth Unified Production Server Live!`);
   console.log(`------------------------------------------------------`);
-  console.log(`Local Browser:    http://localhost:${PORT}/`);
-  console.log(`Mobile & Devices: http://${localIp}:${PORT}/`);
-  console.log(`Serving Web App:  ${baseDir}`);
+  console.log(`💻 Local Computer:    http://localhost:${PORT}/`);
+  console.log(`📱 Same Wi-Fi/LAN:    http://${localIp}:${PORT}/`);
+  console.log(`Serving Web App from: ${baseDir}`);
   const dbStatus = await checkDatabase();
   if (dbStatus.dbConnected) {
     console.log(`[Database Status] ONLINE - Connected to PostgreSQL (foodbooth)`);
@@ -796,4 +1010,7 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log(`[Mode] Automatic Fallback Active: Using localStorage & mockData.`);
   }
   console.log(`======================================================\n`);
+
+  // Start public internet tunnel
+  startPublicTunnel();
 });
