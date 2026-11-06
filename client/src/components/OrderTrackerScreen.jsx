@@ -5,7 +5,6 @@ import { CheckIcon } from './Icons';
 export default function OrderTrackerScreen({
   activeOrder,
   allOrders,
-  onAdvanceOrderStatus,
   onReorder,
 }) {
   const [selectedTab, setSelectedTab] = React.useState('active'); // 'active' | 'history'
@@ -28,7 +27,7 @@ export default function OrderTrackerScreen({
         <div className="flex space-x-1">
           <button
             onClick={() => setSelectedTab('active')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
               selectedTab === 'active'
                 ? 'bg-slate-900 text-white shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -36,12 +35,12 @@ export default function OrderTrackerScreen({
           >
             <span>Active Order</span>
             {activeOrder && activeOrder.status !== 'collected' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             )}
           </button>
           <button
             onClick={() => setSelectedTab('history')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
               selectedTab === 'history'
                 ? 'bg-slate-900 text-white shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -76,19 +75,21 @@ export default function OrderTrackerScreen({
                   </div>
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1 font-display">
                     {activeOrder.status === 'ready'
-                      ? 'Food is Ready for Pickup'
+                      ? 'Food is Ready for Pickup!'
                       : activeOrder.status === 'collected'
-                      ? 'Order Collected'
-                      : 'Kitchen is Preparing Your Meal'}
+                      ? 'Order Collected & Completed'
+                      : activeOrder.status === 'preparing'
+                      ? 'Kitchen Chefs Are Cooking Your Meal'
+                      : 'Order Received by Kitchen'}
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Counter: <strong className="text-slate-800">{activeOrder.counter}</strong> •{' '}
+                    Assigned Counter: <strong className="text-slate-800">{activeOrder.counter}</strong> •{' '}
                     Pickup Slot: <strong className="text-slate-800">{activeOrder.pickupSlot}</strong>
                   </p>
                 </div>
 
                 {/* 4-Digit Pickup PIN */}
-                <div className="bg-slate-900 text-white p-3.5 rounded-2xl text-center sm:text-right shrink-0 border border-slate-800">
+                <div className="bg-slate-900 text-white p-3.5 rounded-2xl text-center sm:text-right shrink-0 border border-slate-800 shadow-xs">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
                     Counter Pickup PIN
                   </span>
@@ -101,7 +102,7 @@ export default function OrderTrackerScreen({
               {/* 5-Stage Visual Timeline */}
               <div className="space-y-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Preparation Progress
+                  Kitchen Preparation Progress
                 </span>
                 <div className="flex sm:grid sm:grid-cols-5 gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar pb-1">
                   {stages.map((st, idx) => {
@@ -122,7 +123,7 @@ export default function OrderTrackerScreen({
                           <span
                             className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
                               isCurrent
-                                ? 'bg-[#ab3500] text-white'
+                                ? 'bg-[#ab3500] text-white animate-pulse'
                                 : isDone
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-slate-200 text-slate-600'
@@ -132,7 +133,7 @@ export default function OrderTrackerScreen({
                           </span>
                           {isCurrent && (
                             <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded-sm bg-[#ab3500] text-white">
-                              Active
+                              Current
                             </span>
                           )}
                         </div>
@@ -171,11 +172,11 @@ export default function OrderTrackerScreen({
                       <rect width="8" height="8" x="45" y="75" />
                     </svg>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-500 font-bold">
+                  <span className="text-[11px] font-mono text-slate-500 font-bold truncate max-w-[200px]">
                     {activeOrder.qrToken}
                   </span>
                   <p className="text-[11px] text-slate-500">
-                    Flash screen at <strong>{activeOrder.counter}</strong> to collect.
+                    Show this screen at <strong>{activeOrder.counter}</strong> to collect your meal.
                   </p>
                 </div>
 
@@ -192,7 +193,7 @@ export default function OrderTrackerScreen({
                       >
                         <div className="flex items-center space-x-3">
                           <img
-                            src={it.imageUrl}
+                            src={it.imageUrl || '/burger.jpg'}
                             alt={it.name}
                             className="w-10 h-10 rounded-lg object-cover border"
                             onError={(e) => { e.target.src = '/burger.jpg'; }}
@@ -212,42 +213,45 @@ export default function OrderTrackerScreen({
                   {/* Financials */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">
-                      Payment via <strong>{activeOrder.paymentMethod}</strong>
+                      Payment via <strong>{activeOrder.paymentMethod || 'Campus Meal Card'}</strong>
                     </span>
                     <span className="text-base font-black text-[#ab3500]">
-                      Total: ₹{activeOrder.total.toFixed(2)}
+                      Total: ₹{Number(activeOrder.total).toFixed(2)}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Interactive Kitchen Simulation Control */}
-              <div className="pt-3 border-t border-slate-100 bg-slate-50 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div>
-                  <span className="text-xs font-bold text-slate-800 block">
-                    Kitchen Status Simulation
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    Simulate how kitchen staff advance the ticket status in real-time.
+              {/* Real-time Kitchen Status Notice (Customer View Only - Managed by Staff) */}
+              <div className="pt-3 border-t border-slate-100 bg-gradient-to-r from-amber-50/80 to-orange-50/60 border border-amber-200/70 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center space-x-3 text-left">
+                  <div className="w-10 h-10 rounded-2xl bg-[#ab3500] text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-xs">
+                    👨‍🍳
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-900 block font-display">
+                      {activeOrder.status === 'ready'
+                        ? 'Your meal is packaged and ready at the counter!'
+                        : activeOrder.status === 'preparing'
+                        ? 'Kitchen staff is actively preparing your order'
+                        : activeOrder.status === 'collected'
+                        ? 'Order successfully handed over and completed'
+                        : 'Order queued on Kitchen Display Screen'}
+                    </span>
+                    <span className="text-[11px] text-slate-600">
+                      {activeOrder.status === 'ready'
+                        ? `Head to ${activeOrder.counter} and show your PIN: ${activeOrder.pin}`
+                        : `Cooks at ${activeOrder.counter} will update your progress bar as dishes are prepared.`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 shrink-0">
+                  <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-200 text-[11px] font-extrabold text-slate-700 shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live Staff KDS Sync</span>
                   </span>
                 </div>
-                <button
-                  onClick={() => onAdvanceOrderStatus(activeOrder.id)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition shadow-2xs flex items-center space-x-1.5 shrink-0"
-                >
-                  <span>Advance Status:</span>
-                  <span className="text-amber-300">
-                    {activeOrder.status === 'placed'
-                      ? 'Accept Ticket ➔'
-                      : activeOrder.status === 'confirmed'
-                      ? 'Start Cooking ➔'
-                      : activeOrder.status === 'preparing'
-                      ? 'Mark Ready for Pickup'
-                      : activeOrder.status === 'ready'
-                      ? 'Confirm Handover'
-                      : 'Completed'}
-                  </span>
-                </button>
               </div>
             </div>
           </div>
@@ -260,53 +264,53 @@ export default function OrderTrackerScreen({
           </div>
         )
       ) : (
-        /* Past Orders History List */
-        <div className="space-y-3">
-          {allOrders.map((ord) => (
-            <div
-              key={ord.id}
-              className="bg-white rounded-xl p-4 border border-slate-200 space-y-3"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                <div className="flex items-center space-x-2.5">
-                  <span className="font-mono font-bold text-xs text-slate-900">{ord.id}</span>
-                  <span className="text-slate-300">·</span>
-                  <span className="text-xs text-slate-500 font-medium">{ord.placedAt}</span>
-                  <span className="text-slate-300">·</span>
-                  <span className="text-xs text-slate-600 font-medium">{ord.counter}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                    {ord.status === 'collected' ? 'Collected' : ord.status}
-                  </span>
-                  <span className="font-bold text-slate-900 text-xs">₹{ord.total.toFixed(2)}</span>
-                </div>
-              </div>
+        /* Order History List */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900 text-sm">Completed & Past Orders</h3>
+            <span className="text-xs text-slate-400">{allOrders.length} total orders</span>
+          </div>
 
-              {/* Items List */}
-              <div className="flex flex-wrap gap-2">
-                {ord.items.map((it, i) => (
-                  <span
-                    key={i}
-                    className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-800"
-                  >
-                    <strong className="text-[#ab3500] mr-1">{it.quantity}x</strong>
-                    {it.name}
-                  </span>
-                ))}
+          <div className="space-y-3">
+            {allOrders.length === 0 ? (
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-xs text-slate-400">
+                No past orders found in this account.
               </div>
-
-              <div className="flex items-center justify-between pt-1 text-xs">
-                <span className="text-slate-400">Paid via {ord.paymentMethod}</span>
-                <button
-                  onClick={() => onReorder(ord)}
-                  className="px-3 py-1.5 bg-[#ab3500] hover:bg-[#8f2c00] text-white text-xs font-bold rounded-lg transition"
+            ) : (
+              allOrders.map((ord) => (
+                <div
+                  key={ord.id}
+                  className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-300 transition shadow-2xs"
                 >
-                  Reorder to Tray
-                </button>
-              </div>
-            </div>
-          ))}
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono font-bold text-xs text-slate-900">{ord.id}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase bg-emerald-100 text-emerald-800">
+                        {ord.status}
+                      </span>
+                      <span className="text-xs text-slate-400">• {ord.placedAt}</span>
+                    </div>
+                    <div className="text-xs text-slate-600 font-medium">
+                      {ord.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Counter: <strong>{ord.counter}</strong> • Total Paid:{' '}
+                      <strong className="text-slate-800">₹{Number(ord.total).toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <button
+                      onClick={() => onReorder(ord)}
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition cursor-pointer"
+                    >
+                      Re-Order Items
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>

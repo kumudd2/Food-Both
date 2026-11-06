@@ -133,6 +133,21 @@ export default function App() {
     checkDatabaseConnection();
   }, []);
 
+  // Live polling for order status updates from Kitchen Staff KDS
+  useEffect(() => {
+    if (!dbStatus.connected) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/orders');
+        const data = await res.json();
+        if (data && Array.isArray(data.orders)) {
+          setOrders(data.orders);
+        }
+      } catch (_) {}
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [dbStatus.connected]);
+
   // Sync state to localStorage
   useEffect(() => {
     localStorage.setItem('fb_current_role', role);
@@ -507,7 +522,6 @@ export default function App() {
                 <OrderTrackerScreen
                   activeOrder={activeOrder}
                   allOrders={orders}
-                  onAdvanceOrderStatus={handleAdvanceOrderStatus}
                   onReorder={handleReorder}
                 />
               )}
