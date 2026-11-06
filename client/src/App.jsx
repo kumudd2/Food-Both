@@ -1,5 +1,5 @@
 // client/src/App.jsx
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from './components/Navbar';
 import MenuScreen from './components/MenuScreen';
 import CartDrawer from './components/CartDrawer';
@@ -7,6 +7,8 @@ import DishModal from './components/DishModal';
 import OrderTrackerScreen from './components/OrderTrackerScreen';
 import WalletScreen from './components/WalletScreen';
 import AdminPortal from './components/AdminPortal';
+import AuthModal from './components/AuthModal';
+import MobileShareModal from './components/MobileShareModal';
 import { BagIcon, ArrowRightIcon } from './components/Icons';
 import {
   INITIAL_FOOD_ITEMS,
@@ -15,31 +17,41 @@ import {
 } from './data/mockData';
 
 export default function App() {
-  const [role, setRole] = React.useState(() => {
+  const [role, setRole] = useState(() => {
     return localStorage.getItem('fb_current_role') || 'student';
   });
 
-  const [foodItems, setFoodItems] = React.useState(() => {
+  const [foodItems, setFoodItems] = useState(() => {
     const saved = localStorage.getItem('fb_food_items');
     return saved ? JSON.parse(saved) : INITIAL_FOOD_ITEMS;
   });
 
-  const [cartItems, setCartItems] = React.useState(() => {
+  const [cartItems, setCartItems] = useState(() => {
     const saved = localStorage.getItem('fb_cart_items');
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [orders, setOrders] = React.useState(() => {
+  const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('fb_orders');
     return saved ? JSON.parse(saved) : INITIAL_ORDERS;
   });
 
-  const [user, setUser] = React.useState(() => {
+  const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('fb_user');
-    return saved ? JSON.parse(saved) : INITIAL_USER;
+    const token = localStorage.getItem('fb_auth_token');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...parsed, isLoggedIn: Boolean(token) };
+      } catch (_) {}
+    }
+    return {
+      ...INITIAL_USER,
+      isLoggedIn: Boolean(token),
+    };
   });
 
-  const [walletTransactions, setWalletTransactions] = React.useState(() => {
+  const [walletTransactions, setWalletTransactions] = useState(() => {
     const saved = localStorage.getItem('fb_wallet_txns');
     return saved
       ? JSON.parse(saved)
@@ -50,19 +62,22 @@ export default function App() {
         ];
   });
 
-  const [studentTab, setStudentTab] = React.useState('menu');
-  const [adminTab, setAdminTab] = React.useState('kds');
-  const [isCartOpen, setIsCartOpen] = React.useState(false);
-  const [modalDish, setModalDish] = React.useState(null);
-  const [toastMessage, setToastMessage] = React.useState(null);
-  const [dbStatus, setDbStatus] = React.useState({
+  const [studentTab, setStudentTab] = useState('menu');
+  const [adminTab, setAdminTab] = useState('kds');
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [modalDish, setModalDish] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [isMobileShareOpen, setIsMobileShareOpen] = useState(false);
+  const [dbStatus, setDbStatus] = useState({
     checked: false,
     connected: false,
     database: null,
   });
 
   // Database Auto-Detection & Fallback Protocol
-  React.useEffect(() => {
+  useEffect(() => {
     async function checkDatabaseConnection() {
       try {
         const res = await fetch('/api/status');
@@ -119,40 +134,81 @@ export default function App() {
   }, []);
 
   // Sync state to localStorage
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('fb_current_role', role);
   }, [role]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('fb_food_items', JSON.stringify(foodItems));
   }, [foodItems]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('fb_cart_items', JSON.stringify(cartItems));
   }, [cartItems]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('fb_orders', JSON.stringify(orders));
   }, [orders]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('fb_user', JSON.stringify(user));
   }, [user]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('fb_wallet_txns', JSON.stringify(walletTransactions));
   }, [walletTransactions]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const cartCount = React.useMemo(() => {
+  // Auth Callbacks
+  const handleAuthSuccess = (authData) => {
+    if (authData && authData.user) {
+      const loggedUser = {
+        ...user,
+        ...authData.user,
+        isLoggedIn: true,
+      };
+      setUser(loggedUser);
+      localStorage.setItem('fb_user', JSON.stringify(loggedUser));
+      if (authData.token) {
+        localStorage.setItem('fb_auth_token', authData.token);
+      }
+
+      if (authData.user.role === 'admin' || authData.user.role === 'staff') {
+        setRole('admin');
+        setAdminTab('kds');
+        showToast(`Signed in as ${authData.user.name} (Staff Portal)`);
+      } else {
+        setRole('student');
+        setStudentTab('menu');
+        showToast(`Signed in as ${authData.user.name}`);
+      }
+    }
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('fb_auth_token');
+    const guestUser = {
+      ...INITIAL_USER,
+      name: 'Guest Customer',
+      studentId: 'STU-GUEST',
+      isLoggedIn: false,
+    };
+    setUser(guestUser);
+    localStorage.setItem('fb_user', JSON.stringify(guestUser));
+    setRole('student');
+    setStudentTab('menu');
+    showToast('Signed out successfully');
+  };
+
+  const cartCount = useMemo(() => {
     return cartItems.reduce((acc, curr) => acc + curr.quantity, 0);
   }, [cartItems]);
 
-  const cartTotal = React.useMemo(() => {
+  const cartTotal = useMemo(() => {
     return cartItems.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
   }, [cartItems]);
 
@@ -318,7 +374,6 @@ export default function App() {
     );
     showToast('Stock availability updated');
 
-    // If PostgreSQL is connected, toggle stock in database
     if (dbStatus.connected) {
       fetch(`/api/menu/${foodId}`, {
         method: 'PUT',
@@ -333,7 +388,6 @@ export default function App() {
     setFoodItems((prev) => [newDish, ...prev]);
     showToast(`Added "${newDish.name}" to menu`);
 
-    // If PostgreSQL is connected, save dish to database
     if (dbStatus.connected) {
       fetch('/api/menu', {
         method: 'POST',
@@ -410,6 +464,12 @@ export default function App() {
         role={role}
         onToggleRole={handleToggleRole}
         dbStatus={dbStatus}
+        onOpenAuth={() => {
+          setAuthMode('login');
+          setIsAuthOpen(true);
+        }}
+        onSignOut={handleSignOut}
+        onOpenMobileShare={() => setIsMobileShareOpen(true)}
       />
 
       {/* Main Container with smooth fade transition on activeTab change */}
@@ -465,7 +525,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* Persistent Floating Tray FAB (Always anchored to the bottom-right viewport corner in Student mode) */}
+      {/* Persistent Floating Tray FAB (Always anchored to the bottom-right in Student mode) */}
       {role === 'student' && (
         <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40">
           <button
@@ -521,6 +581,21 @@ export default function App() {
         isOpen={Boolean(modalDish)}
         onClose={() => setModalDish(null)}
         onAddToCart={handleAddToCart}
+      />
+
+      {/* Login & Registration Auth Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        initialMode={authMode}
+        initialRole={role === 'admin' ? 'staff' : 'student'}
+      />
+
+      {/* Mobile QR & Link Sharing Modal */}
+      <MobileShareModal
+        isOpen={isMobileShareOpen}
+        onClose={() => setIsMobileShareOpen(false)}
       />
 
       {/* Clean Animated Toast */}

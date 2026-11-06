@@ -1,5 +1,5 @@
 // client/src/components/Navbar.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import { WalletIcon, PlusIcon } from './Icons';
 
 export default function Navbar({
@@ -11,8 +11,13 @@ export default function Navbar({
   role,
   onToggleRole,
   dbStatus = { connected: false },
+  user,
+  onOpenAuth,
+  onSignOut,
+  onOpenMobileShare,
 }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   const studentTabs = [
     { id: 'menu', label: 'Menu' },
@@ -33,7 +38,7 @@ export default function Navbar({
   const currentTabs = role === 'admin' ? adminTabs : studentTabs;
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 w-full">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 w-full shadow-xs">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Minimal Logo */}
@@ -41,7 +46,7 @@ export default function Navbar({
             className="flex items-center space-x-2.5 cursor-pointer shrink-0"
             onClick={() => setActiveTab(role === 'admin' ? 'kds' : 'menu')}
           >
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-black tracking-tighter">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-black tracking-tighter shadow-xs">
               FB
             </div>
             <div className="flex items-center space-x-2">
@@ -65,7 +70,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Center: Clean Minimal Nav Links (Menu & My Orders only) */}
+          {/* Center: Clean Minimal Nav Links (Menu & My Orders) */}
           <nav className="hidden md:flex items-center space-x-1">
             {currentTabs.map((item) => {
               const isActive = activeTab === item.id;
@@ -76,7 +81,7 @@ export default function Navbar({
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
                     isActive
                       ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer'
                   }`}
                 >
                   <span>{item.label}</span>
@@ -94,14 +99,24 @@ export default function Navbar({
             })}
           </nav>
 
-          {/* Right Corner: Wallet with [+] icon only, Role Toggle & Profile */}
-          <div className="flex items-center space-x-2.5">
+          {/* Right Corner: Phone Link, Wallet, Role Toggle & Profile / Sign In */}
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
+            {/* Open on Phone / QR Button */}
+            <button
+              onClick={onOpenMobileShare}
+              title="Open app on mobile phone or tablet (QR Code & Link)"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-extrabold bg-orange-50 hover:bg-orange-100 text-[#ab3500] border border-orange-200/80 transition cursor-pointer shadow-2xs"
+            >
+              <span>📱</span>
+              <span className="hidden sm:inline">Phone URL</span>
+            </button>
+
             {/* Wallet: Just balance + '+' icon */}
             {role === 'student' && (
               <button
                 onClick={onOpenWallet}
                 title="Click to view Dining Wallet / Recharge"
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition border ${
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
                   activeTab === 'wallet'
                     ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                     : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
@@ -115,22 +130,99 @@ export default function Navbar({
               </button>
             )}
 
-            {/* Role Switcher in Corner (Shown on sm+ desktop; mobile has dedicated entry in hamburger) */}
+            {/* Role Switcher in Corner */}
             <button
               onClick={onToggleRole}
               title={role === 'student' ? 'Switch to Staff KDS View' : 'Switch to Student View'}
-              className="hidden sm:flex items-center space-x-1 px-3 py-1.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              className="hidden lg:flex items-center space-x-1 px-3 py-1.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
             >
               <span>{role === 'student' ? 'Staff KDS' : 'Student View'}</span>
             </button>
 
-            {/* Profile Avatar */}
-            <img
-              src="/avatar.jpg"
-              alt="Avatar"
-              className="w-8 h-8 rounded-full border border-slate-200 object-cover hidden sm:block"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
+            {/* User Profile & Auth / Sign In Button */}
+            {user && user.isLoggedIn ? (
+              <div className="relative">
+                <button
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  className="flex items-center space-x-2 p-1 pl-2 pr-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl transition cursor-pointer"
+                >
+                  <img
+                    src={user.avatarUrl || '/avatar.jpg'}
+                    alt="Avatar"
+                    className="w-7 h-7 rounded-full border border-slate-200 object-cover"
+                    onError={(e) => {
+                      e.target.src = '/avatar.jpg';
+                    }}
+                  />
+                  <div className="text-left hidden sm:block">
+                    <span className="text-[11px] font-black text-slate-900 block leading-tight truncate max-w-[90px]">
+                      {user.name?.split(' ')[0] || 'User'}
+                    </span>
+                    <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                      {user.role === 'admin' ? 'Staff' : 'Student'}
+                    </span>
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                {userDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-fade-in text-xs">
+                    <div className="px-4 py-2 border-b border-slate-100">
+                      <p className="font-extrabold text-slate-900 truncate">{user.name}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                      <span className="mt-1 inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-[#ab3500]">
+                        {user.role === 'admin' ? 'Cafeteria Staff / Admin' : 'Campus Student'}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setUserDropdownOpen(false);
+                        onOpenWallet();
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 font-bold text-slate-700 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>Dining Wallet</span>
+                      <span className="font-black text-[#ab3500]">₹{Math.round(walletBalance || 0)}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setUserDropdownOpen(false);
+                        onOpenMobileShare();
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 font-bold text-slate-700 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>📱 Open on Mobile</span>
+                      <span className="text-[10px] text-slate-400">QR Code</span>
+                    </button>
+
+                    <div className="border-t border-slate-100 my-1"></div>
+
+                    <button
+                      onClick={() => {
+                        setUserDropdownOpen(false);
+                        onSignOut();
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-rose-50 font-black text-rose-600 flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="py-1.5 px-3 sm:px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-xs transition flex items-center space-x-1.5 cursor-pointer shrink-0"
+              >
+                <span>👤</span>
+                <span>Sign In</span>
+              </button>
+            )}
 
             {/* Mobile Hamburger Button */}
             <button
@@ -171,6 +263,17 @@ export default function Navbar({
               </button>
             ))}
 
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenMobileShare();
+              }}
+              className="px-3 py-2 rounded-xl text-xs font-extrabold text-left flex items-center justify-between text-[#ab3500] bg-orange-50/70"
+            >
+              <span>📱 Open on Mobile / Share Link</span>
+              <span className="text-[10px] font-bold">QR</span>
+            </button>
+
             {role === 'student' && (
               <button
                 onClick={() => {
@@ -188,7 +291,7 @@ export default function Navbar({
             )}
 
             <div className="pt-2 pb-1 px-3 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100 mt-1">
-              <span>Data Storage:</span>
+              <span>Database Sync:</span>
               {dbStatus?.connected ? (
                 <span className="font-bold text-emerald-600 flex items-center space-x-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -211,6 +314,28 @@ export default function Navbar({
             >
               <span>{role === 'student' ? 'Switch to Staff Portal' : 'Switch to Student View'}</span>
             </button>
+
+            {user && user.isLoggedIn ? (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onSignOut();
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-black text-left flex items-center justify-between bg-rose-50 text-rose-700 mt-1"
+              >
+                <span>Sign Out ({user.name})</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth();
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-black text-left flex items-center justify-between bg-slate-900 text-white mt-1"
+              >
+                <span>Sign In / Create Account</span>
+              </button>
+            )}
           </div>
         )}
       </div>

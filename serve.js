@@ -2,8 +2,12 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const QRCode = require('qrcode');
 
 // 1. Load Environment Configuration
 const rootEnvPath = path.join(__dirname, '.env');
@@ -17,8 +21,22 @@ if (fs.existsSync(rootEnvPath)) {
 }
 
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'foodbooth-jwt-super-secret-key-2026';
 const distDir = path.join(__dirname, 'client', 'dist');
 const baseDir = fs.existsSync(distDir) ? distDir : __dirname;
+
+// Helper: Get local network IPv4 address
+function getLocalNetworkIp() {
+  const ifaces = os.networkInterfaces();
+  for (const dev in ifaces) {
+    for (const details of ifaces[dev]) {
+      if (details.family === 'IPv4' && !details.internal && !details.address.startsWith('169.254.')) {
+        return details.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 
 // 2. PostgreSQL Connection Pool
 const dbUrl =
@@ -31,7 +49,6 @@ const pool = new Pool({
 });
 
 pool.on('error', (err) => {
-  // Prevent unhandled pool crash
   console.log('[PostgreSQL] Connection notice:', err.message);
 });
 
@@ -90,6 +107,18 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
+// Helper: verify JWT token from Authorization header
+function getAuthUser(req) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.split(' ')[1];
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
 // 4. MIME Types for Static Files
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -108,7 +137,7 @@ const MIME_TYPES = {
 
 // 5. Main HTTP Request Handler
 const server = http.createServer(async (req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost:3000'}`);
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost:' + PORT}`);
   const pathname = parsedUrl.pathname;
 
   // Handle CORS preflight
@@ -122,13 +151,307 @@ const server = http.createServer(async (req, res) => {
   }
 
   // -------------------------------------------------------------
-  // API ROUTING: PostgreSQL Endpoints
+  // API ROUTING: PostgreSQL & Network Endpoints
   // -------------------------------------------------------------
+
+  // Network & Mobile Access Info Endpoint
+  if (pathname === '/api/network-info' && req.method === 'GET') {
+    const localIp = getLocalNetworkIp();
+    const networkUrl = `http://${localIp}:${PORT}`;
+    const localUrl = `http://localhost:${PORT}`;
+    try {
+      const qrCodeDataUrl = await QRCode.toDataURL(networkUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 280,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff',
+        },
+      });
+      return sendJson(res, 200, {
+        localUrl,
+        networkUrl,
+        ip: localIp,
+        port: PORT,
+        qrCodeDataUrl,
+      });
+    } catch (err) {
+      return sendJson(res, 200, {
+        localUrl,
+        networkUrl,
+        ip: localIp,
+        port: PORT,
+        qrCodeDataUrl: null,
+      });
+    }
+  }
 
   // Health / DB Status Endpoint
   if (pathname === '/api/status' && req.method === 'GET') {
     const status = await checkDatabase();
     return sendJson(res, 200, status);
+  }
+
+  // -------------------------------------------------------------
+  // AUTHENTICATION ENDPOINTS (PostgreSQL + JWT)
+  // -------------------------------------------------------------
+
+  // POST /api/auth/login
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const identifier = (data.email || data.identifier || '').trim().toLowerCase();
+      const password = data.password || '';
+      const selectedRole = data.role || 'student';
+
+      if (!identifier || !password) {
+        return sendJson(res, 400, { error: 'Please enter your email/ID and password.' });
+      }
+
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        // Fallback demo login when offline
+        const isStaff = selectedRole === 'staff' || selectedRole === 'admin';
+        const demoUser = {
+          id: isStaff ? '33333333-3333-3333-3333-333333333333' : '11111111-1111-1111-1111-111111111111',
+          name: isStaff ? 'Cafeteria Manager Sharma' : 'Kumud Negi',
+          email: identifier,
+          role: selectedRole,
+          phone: '+91 98765 43210',
+          studentId: 'STU-2024-8842',
+          avatarUrl: '/avatar.jpg',
+          walletBalance: 480,
+          rewardPoints: 240,
+        };
+        const token = jwt.sign(
+          { id: demoUser.id, email: demoUser.email, role: demoUser.role },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+        return sendJson(res, 200, { success: true, token, user: demoUser });
+      }
+
+      // Query user by email, phone, or roll number in student_profiles
+      const userRes = await pool.query(
+        `SELECT u.id, u.role, u.full_name, u.email, u.phone, u.password_hash, u.avatar_url, u.is_active,
+                sp.roll_number, sp.department, w.balance as wallet_balance, w.reward_points
+         FROM users u
+         LEFT JOIN student_profiles sp ON u.id = sp.user_id
+         LEFT JOIN wallets w ON u.id = w.user_id
+         WHERE LOWER(u.email) = $1 OR LOWER(COALESCE(sp.roll_number, '')) = $1 OR u.phone = $1
+         LIMIT 1;`,
+        [identifier]
+      );
+
+      if (userRes.rows.length === 0) {
+        return sendJson(res, 401, { error: 'No account found with this email or student ID.' });
+      }
+
+      const user = userRes.rows[0];
+
+      if (!user.is_active) {
+        return sendJson(res, 403, { error: 'This account has been deactivated. Please contact cafeteria admin.' });
+      }
+
+      // Verify password
+      let isValidPassword = false;
+      try {
+        isValidPassword = bcrypt.compareSync(password, user.password_hash);
+      } catch (_) {}
+
+      // Fallback check for plain-text or placeholder passwords
+      if (!isValidPassword && (user.password_hash === password || user.password_hash.includes('placeholder'))) {
+        isValidPassword = true;
+      }
+
+      if (!isValidPassword) {
+        return sendJson(res, 401, { error: 'Incorrect password. Please try again.' });
+      }
+
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      return sendJson(res, 200, {
+        success: true,
+        token,
+        user: {
+          id: user.id,
+          name: user.full_name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          studentId: user.roll_number || (user.role === 'student' ? 'STU-2024' : 'STAFF-01'),
+          department: user.department || 'Campus Community',
+          avatarUrl: user.avatar_url || '/avatar.jpg',
+          walletBalance: Number(user.wallet_balance || 480),
+          rewardPoints: Number(user.reward_points || 240),
+        },
+      });
+    } catch (err) {
+      console.error('[Auth Login Error]:', err);
+      return sendJson(res, 500, { error: 'Server authentication error: ' + err.message });
+    }
+  }
+
+  // POST /api/auth/register
+  if (pathname === '/api/auth/register' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const fullName = (data.fullName || data.name || '').trim();
+      const email = (data.email || '').trim().toLowerCase();
+      const phone = (data.phone || '').trim();
+      const password = data.password || '';
+      let role = (data.role || 'student').toLowerCase();
+      if (!['student', 'staff', 'admin'].includes(role)) {
+        role = 'student';
+      }
+      const rollNumber = (data.rollNumber || data.studentId || `STU-${Math.floor(1000 + Math.random() * 9000)}`).trim();
+      const department = (data.department || 'General Studies').trim();
+
+      if (!fullName) return sendJson(res, 400, { error: 'Full name is required.' });
+      if (!email || !email.includes('@')) return sendJson(res, 400, { error: 'A valid email address is required.' });
+      if (password.length < 6) return sendJson(res, 400, { error: 'Password must be at least 6 characters.' });
+
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        // Fallback offline signup
+        const newUserId = 'demo-' + Date.now();
+        const fallbackUser = {
+          id: newUserId,
+          name: fullName,
+          email,
+          role,
+          phone,
+          studentId: rollNumber,
+          department,
+          avatarUrl: '/avatar.jpg',
+          walletBalance: 500,
+          rewardPoints: 50,
+        };
+        const token = jwt.sign(
+          { id: fallbackUser.id, email: fallbackUser.email, role: fallbackUser.role },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+        return sendJson(res, 201, { success: true, token, user: fallbackUser });
+      }
+
+      // Check if email already exists
+      const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1;', [email]);
+      if (existing.rows.length > 0) {
+        return sendJson(res, 400, { error: 'An account with this email already exists. Please sign in.' });
+      }
+
+      // Hash password
+      const passwordHash = bcrypt.hashSync(password, 10);
+
+      // Insert new user
+      const userRes = await pool.query(
+        `INSERT INTO users (role, full_name, email, phone, password_hash, avatar_url, is_active)
+         VALUES ($1, $2, $3, $4, $5, '/avatar.jpg', TRUE)
+         RETURNING id, role, full_name, email, phone, avatar_url;`,
+        [role, fullName, email, phone || null, passwordHash]
+      );
+      const newUser = userRes.rows[0];
+
+      // If student, insert student profile
+      if (role === 'student') {
+        try {
+          await pool.query(
+            `INSERT INTO student_profiles (user_id, roll_number, department, year_of_study)
+             VALUES ($1, $2, $3, 1)
+             ON CONFLICT (roll_number) DO NOTHING;`,
+            [newUser.id, rollNumber, department]
+          );
+        } catch (_) {}
+      }
+
+      // Create initial wallet with ₹500 welcome bonus credit
+      try {
+        await pool.query(
+          `INSERT INTO wallets (user_id, balance, reward_points)
+           VALUES ($1, 500.00, 50)
+           ON CONFLICT (user_id) DO UPDATE SET balance = wallets.balance + 500.00;`,
+          [newUser.id]
+        );
+
+        await pool.query(
+          `INSERT INTO wallet_transactions (user_id, txn_type, amount, balance_after, reference)
+           VALUES ($1, 'credit', 500.00, 500.00, 'Welcome Dining Credit Bonus');`,
+          [newUser.id]
+        );
+      } catch (_) {}
+
+      const token = jwt.sign(
+        { id: newUser.id, email: newUser.email, role: newUser.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      return sendJson(res, 201, {
+        success: true,
+        message: 'Account created successfully! ₹500 Welcome Bonus credited to your Dining Wallet.',
+        token,
+        user: {
+          id: newUser.id,
+          name: newUser.full_name,
+          email: newUser.email,
+          role: newUser.role,
+          phone: newUser.phone,
+          studentId: rollNumber,
+          department,
+          avatarUrl: newUser.avatar_url || '/avatar.jpg',
+          walletBalance: 500,
+          rewardPoints: 50,
+        },
+      });
+    } catch (err) {
+      console.error('[Auth Register Error]:', err);
+      return sendJson(res, 500, { error: 'Failed to create account: ' + err.message });
+    }
+  }
+
+  // GET /api/auth/me
+  if (pathname === '/api/auth/me' && req.method === 'GET') {
+    const auth = getAuthUser(req);
+    if (!auth) {
+      return sendJson(res, 401, { error: 'Not authenticated or token expired.' });
+    }
+    try {
+      const userRes = await pool.query(
+        `SELECT u.id, u.role, u.full_name, u.email, u.phone, u.avatar_url,
+                sp.roll_number, sp.department, w.balance as wallet_balance, w.reward_points
+         FROM users u
+         LEFT JOIN student_profiles sp ON u.id = sp.user_id
+         LEFT JOIN wallets w ON u.id = w.user_id
+         WHERE u.id = $1 LIMIT 1;`,
+        [auth.id]
+      );
+      if (userRes.rows.length === 0) {
+        return sendJson(res, 404, { error: 'User account not found.' });
+      }
+      const u = userRes.rows[0];
+      return sendJson(res, 200, {
+        user: {
+          id: u.id,
+          name: u.full_name,
+          email: u.email,
+          role: u.role,
+          phone: u.phone,
+          studentId: u.roll_number || 'STU-2024',
+          department: u.department || 'Campus Community',
+          avatarUrl: u.avatar_url || '/avatar.jpg',
+          walletBalance: Number(u.wallet_balance || 0),
+          rewardPoints: Number(u.reward_points || 0),
+        },
+      });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
   }
 
   // GET Menu from PostgreSQL
@@ -415,11 +738,12 @@ const server = http.createServer(async (req, res) => {
       `, [amt]);
 
       const newBal = walletUpdate.rows[0]?.balance || 580;
+      const userId = walletUpdate.rows[0]?.user_id || '11111111-1111-1111-1111-111111111111';
 
       await pool.query(`
         INSERT INTO wallet_transactions (user_id, txn_type, amount, balance_after, reference)
         VALUES ($1, 'topup', $2, $3, 'UPI Instant Top-Up');
-      `, [walletUpdate.rows[0]?.user_id || '11111111-1111-1111-1111-111111111111', amt, newBal]);
+      `, [userId, amt, newBal]);
 
       return sendJson(res, 200, { dbConnected: true, balance: Number(newBal) });
     } catch (err) {
@@ -455,10 +779,15 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, '127.0.0.1', async () => {
+// Bind to 0.0.0.0 so other devices on Wi-Fi/LAN can open the app!
+server.listen(PORT, '0.0.0.0', async () => {
+  const localIp = getLocalNetworkIp();
   console.log(`\n======================================================`);
-  console.log(`FoodBooth Unified Server running at http://localhost:${PORT}/`);
-  console.log(`Serving Web App from: ${baseDir}`);
+  console.log(`🍔 FoodBooth Unified Production Server Live!`);
+  console.log(`------------------------------------------------------`);
+  console.log(`Local Browser:    http://localhost:${PORT}/`);
+  console.log(`Mobile & Devices: http://${localIp}:${PORT}/`);
+  console.log(`Serving Web App:  ${baseDir}`);
   const dbStatus = await checkDatabase();
   if (dbStatus.dbConnected) {
     console.log(`[Database Status] ONLINE - Connected to PostgreSQL (foodbooth)`);
