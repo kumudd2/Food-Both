@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
+const { spawn } = require('child_process');
 
 // 1. Load Environment Configuration
 const rootEnvPath = path.join(__dirname, '.env');
@@ -963,7 +964,68 @@ const server = http.createServer(async (req, res) => {
 });
 
 // Helper: Establish Public Tunnel (for global internet access with zero setup)
+let cloudflaredProc = null;
+
 async function startPublicTunnel() {
+  const localCloudflared = path.join(__dirname, 'cloudflared.exe');
+  const hasCloudflared = fs.existsSync(localCloudflared);
+
+  if (hasCloudflared) {
+    console.log('[Tunnel] Launching Cloudflare Tunnel for direct global HTTPS access...');
+    try {
+      if (cloudflaredProc) {
+        try { cloudflaredProc.kill(); } catch (_) {}
+      }
+
+      cloudflaredProc = spawn(localCloudflared, ['tunnel', '--url', `http://localhost:${PORT}`], {
+        windowsHide: true,
+      });
+
+      const handleOutput = async (data) => {
+        const text = data.toString();
+        const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+        if (match && (!publicTunnelUrl || publicTunnelUrl !== match[0])) {
+          publicTunnelUrl = match[0];
+          console.log(`\n======================================================`);
+          console.log(`🌐 CLOUDFLARE PUBLIC URL: ${publicTunnelUrl}`);
+          console.log(`(Open on ANY device anywhere - No shared Wi-Fi needed!)`);
+          console.log(`======================================================\n`);
+
+          try {
+            publicQrCode = await QRCode.toDataURL(publicTunnelUrl, {
+              errorCorrectionLevel: 'M',
+              margin: 2,
+              width: 280,
+              color: { dark: '#0f172a', light: '#ffffff' },
+            });
+          } catch (_) {}
+        }
+      };
+
+      cloudflaredProc.stdout.on('data', handleOutput);
+      cloudflaredProc.stderr.on('data', handleOutput);
+
+      cloudflaredProc.on('close', (code) => {
+        console.log(`[Tunnel] Cloudflare tunnel exited (code ${code}). Reconnecting in 5s...`);
+        publicTunnelUrl = null;
+        setTimeout(startPublicTunnel, 5000);
+      });
+
+      cloudflaredProc.on('error', (err) => {
+        console.log('[Tunnel] Cloudflare error:', err.message, 'falling back to localtunnel...');
+        fallbackLocaltunnel();
+      });
+
+      return;
+    } catch (err) {
+      console.log('[Tunnel] Cloudflare start error:', err.message);
+    }
+  }
+
+  fallbackLocaltunnel();
+}
+
+async function fallbackLocaltunnel() {
   try {
     const localtunnel = require('localtunnel');
     const tunnel = await localtunnel({
@@ -971,7 +1033,7 @@ async function startPublicTunnel() {
       subdomain: 'foodbooth-' + (process.env.TUNNEL_SUBDOMAIN || Math.floor(1000 + Math.random() * 9000)),
     });
     publicTunnelUrl = tunnel.url;
-    console.log(`🌐 Public Web URL: ${publicTunnelUrl} (Open on any device anywhere!)`);
+    console.log(`🌐 Public Web URL (Localtunnel): ${publicTunnelUrl}`);
     try {
       publicQrCode = await QRCode.toDataURL(publicTunnelUrl, {
         errorCorrectionLevel: 'M',
