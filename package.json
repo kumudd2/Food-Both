@@ -5,7 +5,7 @@
   "main": "serve.js",
   "scripts": {
     "start": "node serve.js",
-    "build": "npm run build --prefix client",
+    "build": "npm --prefix client install && npm --prefix client run build",
     "dev": "npm run dev --prefix client",
     "server": "npm start --prefix server"
   },

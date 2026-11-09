@@ -57,9 +57,11 @@ const dbUrl =
   process.env.DATABASE_URL ||
   'postgresql://postgres:postgres@localhost:5432/foodbooth';
 
+const isRemoteDb = Boolean(process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost'));
 const pool = new Pool({
   connectionString: dbUrl,
-  connectionTimeoutMillis: 3000,
+  connectionTimeoutMillis: 3500,
+  ssl: isRemoteDb ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('error', (err) => {
@@ -1015,8 +1017,12 @@ function setupTunnelWatchdog() {
 }
 
 async function startPublicTunnel() {
+  if (process.env.RENDER || process.env.VERCEL || process.env.DISABLE_TUNNEL === 'true') {
+    console.log('[Cloud Host] Running on managed cloud platform. Tunnels disabled.');
+    return;
+  }
   const localCloudflared = path.join(__dirname, 'cloudflared.exe');
-  const hasCloudflared = fs.existsSync(localCloudflared);
+  const hasCloudflared = fs.existsSync(localCloudflared) && process.platform === 'win32';
 
   if (hasCloudflared) {
     console.log('[Tunnel] Launching Cloudflare Tunnel for direct global HTTPS access...');
