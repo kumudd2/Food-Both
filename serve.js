@@ -202,6 +202,17 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // Refresh Tunnel Endpoint
+  if (pathname === '/api/tunnel/refresh' && req.method === 'POST') {
+    console.log('[Tunnel] Manual refresh requested via API...');
+    publicTunnelUrl = null;
+    if (cloudflaredProc) {
+      try { cloudflaredProc.kill(); } catch (_) {}
+    }
+    setTimeout(startPublicTunnel, 1000);
+    return sendJson(res, 200, { success: true, message: 'Tunnel is refreshing...' });
+  }
+
   // Health / DB Status Endpoint
   if (pathname === '/api/status' && req.method === 'GET') {
     const status = await checkDatabase();
@@ -965,6 +976,43 @@ const server = http.createServer(async (req, res) => {
 
 // Helper: Establish Public Tunnel (for global internet access with zero setup)
 let cloudflaredProc = null;
+let tunnelWatchdogTimer = null;
+let consecutiveFailures = 0;
+
+function setupTunnelWatchdog() {
+  if (tunnelWatchdogTimer) clearInterval(tunnelWatchdogTimer);
+  consecutiveFailures = 0;
+
+  tunnelWatchdogTimer = setInterval(async () => {
+    if (!publicTunnelUrl) return;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${publicTunnelUrl}/api/status`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'FoodBooth-Tunnel-Watchdog' },
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        consecutiveFailures = 0;
+        return;
+      }
+      consecutiveFailures++;
+    } catch (_) {
+      consecutiveFailures++;
+    }
+
+    if (consecutiveFailures >= 2) {
+      console.log(`[Watchdog] Public tunnel ${publicTunnelUrl} unresponsive (${consecutiveFailures} checks). Re-establishing tunnel...`);
+      consecutiveFailures = 0;
+      publicTunnelUrl = null;
+      if (cloudflaredProc) {
+        try { cloudflaredProc.kill(); } catch (_) {}
+      }
+      setTimeout(startPublicTunnel, 2000);
+    }
+  }, 30000); // Check every 30 seconds
+}
 
 async function startPublicTunnel() {
   const localCloudflared = path.join(__dirname, 'cloudflared.exe');
@@ -999,6 +1047,8 @@ async function startPublicTunnel() {
               color: { dark: '#0f172a', light: '#ffffff' },
             });
           } catch (_) {}
+
+          setupTunnelWatchdog();
         }
       };
 
