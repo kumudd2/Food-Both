@@ -56,7 +56,7 @@ export default function Navbar({
                 Food<span className="text-[#ab3500]">Booth</span>
               </span>
               <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-slate-200 text-slate-500 bg-slate-50 hidden sm:inline-block">
-                {role === 'admin' ? 'Staff Portal' : 'Central Mess'}
+                {role === 'admin' ? 'Staff Portal' : 'Food Court'}
               </span>
               {dbStatus?.connected ? (
                 <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50 hidden md:inline-flex items-center space-x-1" title="Connected to PostgreSQL Database">

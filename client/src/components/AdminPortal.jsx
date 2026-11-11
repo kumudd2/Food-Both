@@ -161,7 +161,7 @@ export default function AdminPortal({
             Kitchen Staff & Administration Portal
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Central Mess Operations • Live preparation pipeline, menu controls & daily financial logs
+            Kitchen & Counter Operations • Live preparation pipeline, menu controls & daily financial logs
           </p>
         </div>
 

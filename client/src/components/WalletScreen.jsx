@@ -33,7 +33,7 @@ export default function WalletScreen({
       {/* Title */}
       <div>
         <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-display">
-          Campus Dining Wallet
+          FoodBooth Wallet
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
           Linked RFID Student Meal Card for 1-click instant checkout with 5% cashback
@@ -47,9 +47,9 @@ export default function WalletScreen({
           <div className="flex items-center justify-between">
             <div>
               <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block">
-                Campus Dining Pass
+                FoodBooth Dining Pass
               </span>
-              <span className="text-xs font-bold text-white">Central Mess System</span>
+              <span className="text-xs font-bold text-white">FoodBooth Express System</span>
             </div>
             {/* Gold Chip */}
             <div className="w-9 h-6 rounded-md bg-amber-400 border border-amber-500 shadow-2xs"></div>

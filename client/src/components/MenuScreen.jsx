@@ -71,10 +71,10 @@ export default function MenuScreen({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-display">
-            Campus Dining Menu
+            Explore FoodBooth Menu
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Counters 1, 2 & 3 • Pickup ready in ~10 mins
+            Counters 1, 2 & 3 • Freshly prepared on order
           </p>
         </div>
 
