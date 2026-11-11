@@ -1029,10 +1029,13 @@ async function startPublicTunnel() {
         windowsHide: true,
       });
 
+      let hadSuccessfulConnection = false;
+
       const handleOutput = async (data) => {
         const text = data.toString();
         const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
         if (match && (!publicTunnelUrl || publicTunnelUrl !== match[0])) {
+          hadSuccessfulConnection = true;
           publicTunnelUrl = match[0];
           console.log(`\n======================================================`);
           console.log(`🌐 CLOUDFLARE PUBLIC URL: ${publicTunnelUrl}`);
@@ -1056,9 +1059,14 @@ async function startPublicTunnel() {
       cloudflaredProc.stderr.on('data', handleOutput);
 
       cloudflaredProc.on('close', (code) => {
-        console.log(`[Tunnel] Cloudflare tunnel exited (code ${code}). Reconnecting in 5s...`);
+        console.log(`[Tunnel] Cloudflare tunnel exited (code ${code}).`);
         publicTunnelUrl = null;
-        setTimeout(startPublicTunnel, 5000);
+        if (!hadSuccessfulConnection || code !== 0) {
+          console.log('[Tunnel] Cloudflare quick tunnel rate-limited or unavailable. Falling back to localtunnel...');
+          fallbackLocaltunnel();
+        } else {
+          setTimeout(startPublicTunnel, 15000);
+        }
       });
 
       cloudflaredProc.on('error', (err) => {
