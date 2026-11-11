@@ -25,7 +25,6 @@ export default function AdminPortal({
   onAddDish,
   onUpdateDish,
   onDeleteDish,
-  onSwitchToStudent,
   adminTab = 'kds',
   onTabChange,
 }) {

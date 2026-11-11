@@ -18,9 +18,30 @@ import {
 } from './data/mockData';
 
 export default function App() {
-  const [role, setRole] = useState(() => {
-    return localStorage.getItem('fb_current_role') || 'student';
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('fb_user');
+    const token = localStorage.getItem('fb_auth_token');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...parsed, isLoggedIn: Boolean(token) };
+      } catch (_) {}
+    }
+    return {
+      ...INITIAL_USER,
+      isLoggedIn: Boolean(token),
+    };
   });
+
+  // Role is strictly governed by login credentials:
+  // Staff/Admin accounts strictly open Staff KDS Portal ('admin')
+  // Students and non-logged-in customers strictly open Student Portal ('student')
+  const role = useMemo(() => {
+    if (user && user.isLoggedIn && (user.role === 'admin' || user.role === 'staff')) {
+      return 'admin';
+    }
+    return 'student';
+  }, [user]);
 
   const [foodItems, setFoodItems] = useState(() => {
     const saved = localStorage.getItem('fb_food_items');
@@ -35,21 +56,6 @@ export default function App() {
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('fb_orders');
     return saved ? JSON.parse(saved) : INITIAL_ORDERS;
-  });
-
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('fb_user');
-    const token = localStorage.getItem('fb_auth_token');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return { ...parsed, isLoggedIn: Boolean(token) };
-      } catch (_) {}
-    }
-    return {
-      ...INITIAL_USER,
-      isLoggedIn: Boolean(token),
-    };
   });
 
   const [walletTransactions, setWalletTransactions] = useState(() => {
@@ -152,10 +158,6 @@ export default function App() {
 
   // Sync state to localStorage
   useEffect(() => {
-    localStorage.setItem('fb_current_role', role);
-  }, [role]);
-
-  useEffect(() => {
     localStorage.setItem('fb_food_items', JSON.stringify(foodItems));
   }, [foodItems]);
 
@@ -195,11 +197,9 @@ export default function App() {
       }
 
       if (authData.user.role === 'admin' || authData.user.role === 'staff') {
-        setRole('admin');
         setAdminTab('kds');
-        showToast(`Signed in as ${authData.user.name} (Staff Portal)`);
+        showToast(`Signed in as ${authData.user.name} (Kitchen Staff)`);
       } else {
-        setRole('student');
         setStudentTab('menu');
         showToast(`Signed in as ${authData.user.name}`);
       }
@@ -208,15 +208,16 @@ export default function App() {
 
   const handleSignOut = () => {
     localStorage.removeItem('fb_auth_token');
+    localStorage.removeItem('fb_current_role');
     const guestUser = {
       ...INITIAL_USER,
       name: 'Guest Customer',
       studentId: 'STU-GUEST',
+      role: 'student',
       isLoggedIn: false,
     };
     setUser(guestUser);
     localStorage.setItem('fb_user', JSON.stringify(guestUser));
-    setRole('student');
     setStudentTab('menu');
     showToast('Signed out successfully');
   };
@@ -464,16 +465,6 @@ export default function App() {
     showToast(`Order ${orderId} marked cancelled`);
   };
 
-  const handleToggleRole = () => {
-    if (role === 'student') {
-      setRole('admin');
-      showToast('Switched to Staff KDS');
-    } else {
-      setRole('student');
-      showToast('Switched to Student Menu');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#fcfcfd] text-slate-800 flex flex-col font-body selection:bg-rose-100 transition-colors">
       {/* Top Navbar */}
@@ -488,7 +479,6 @@ export default function App() {
         activeOrder={activeOrder}
         user={user}
         role={role}
-        onToggleRole={handleToggleRole}
         dbStatus={dbStatus}
         onOpenAuth={() => {
           setAuthMode('login');
@@ -512,7 +502,6 @@ export default function App() {
               onAddDish={handleAddDish}
               onUpdateDish={handleUpdateDish}
               onDeleteDish={handleDeleteDish}
-              onSwitchToStudent={() => setRole('student')}
               adminTab={adminTab}
               onTabChange={setAdminTab}
             />
