@@ -1,10 +1,10 @@
 // client/src/App.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Navbar from './components/Navbar';
 import MenuScreen from './components/MenuScreen';
 import CartDrawer from './components/CartDrawer';
 import DishModal from './components/DishModal';
-import OrderTrackerScreen from './components/OrderTrackerScreen';
+import OrderTrackerScreen, { OrderFeedbackCard } from './components/OrderTrackerScreen';
 import WalletScreen from './components/WalletScreen';
 import AdminPortal from './components/AdminPortal';
 import AuthModal from './components/AuthModal';
@@ -84,6 +84,10 @@ export default function App() {
     database: null,
   });
 
+  // Auto-popup feedback modal when kitchen confirms pickup
+  const [feedbackPopupOrder, setFeedbackPopupOrder] = useState(null);
+  const prevOrderStatusesRef = useRef({});
+
   // Database Auto-Detection & Fallback Protocol
   useEffect(() => {
     async function checkDatabaseConnection() {
@@ -108,6 +112,9 @@ export default function App() {
             const ordersRes = await fetch('/api/orders');
             const ordersData = await ordersRes.json();
             if (ordersData && Array.isArray(ordersData.orders) && ordersData.orders.length > 0) {
+              ordersData.orders.forEach((o) => {
+                prevOrderStatusesRef.current[o.id] = o.status;
+              });
               setOrders(ordersData.orders);
             }
           } catch (_) {}
@@ -149,12 +156,34 @@ export default function App() {
         const res = await fetch('/api/orders');
         const data = await res.json();
         if (data && Array.isArray(data.orders)) {
-          setOrders(data.orders);
+          const newOrders = data.orders;
+          const prevStatuses = prevOrderStatusesRef.current;
+
+          // Check if any order transitioned to 'collected' and hasn't been rated yet
+          if (role === 'student') {
+            const newlyCollected = newOrders.find(
+              (ord) =>
+                ord.status === 'collected' &&
+                prevStatuses[ord.id] &&
+                prevStatuses[ord.id] !== 'collected' &&
+                !ord.rating
+            );
+            if (newlyCollected) {
+              setFeedbackPopupOrder((current) => current || newlyCollected);
+            }
+          }
+
+          // Update statuses ref
+          newOrders.forEach((o) => {
+            prevOrderStatusesRef.current[o.id] = o.status;
+          });
+
+          setOrders(newOrders);
         }
       } catch (_) {}
     }, 3500);
     return () => clearInterval(interval);
-  }, [dbStatus.connected]);
+  }, [dbStatus.connected, role]);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -313,6 +342,7 @@ export default function App() {
       ]);
     }
 
+    prevOrderStatusesRef.current[newOrder.id] = 'placed';
     setOrders([newOrder, ...orders]);
     setCartItems([]);
     setStudentTab('tracker');
@@ -340,6 +370,9 @@ export default function App() {
             targetStatus || (currentIdx < flow.length - 1 ? flow[currentIdx + 1] : 'collected');
           target = next;
           showToast(`Order ${ord.id}: ${next.toUpperCase()}`);
+          if (next === 'collected' && !ord.rating) {
+            setFeedbackPopupOrder({ ...ord, status: 'collected' });
+          }
           return { ...ord, status: next };
         }
         return ord;
@@ -651,6 +684,43 @@ export default function App() {
         user={user}
         onUpdateProfile={handleUpdateProfile}
       />
+
+      {/* Auto-Popup Feedback Modal on Pickup Confirmation */}
+      {feedbackPopupOrder && role === 'student' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="max-w-lg w-full bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-100 animate-scale-up max-h-[92vh] flex flex-col">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3">
+                <span className="text-3xl">🎉</span>
+                <div>
+                  <h3 className="font-black text-base sm:text-lg tracking-tight font-display">
+                    Pickup Confirmed!
+                  </h3>
+                  <p className="text-xs text-emerald-100">
+                    Order #{feedbackPopupOrder.id} • {feedbackPopupOrder.counter || 'Food Booth Counter'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFeedbackPopupOrder(null)}
+                aria-label="Close"
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition cursor-pointer text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 sm:p-5 overflow-y-auto">
+              <OrderFeedbackCard
+                order={feedbackPopupOrder}
+                onSubmitFeedback={handleSubmitFeedback}
+                isModal={true}
+                onCloseModal={() => setFeedbackPopupOrder(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Clean Animated Toast */}
       {toastMessage && (

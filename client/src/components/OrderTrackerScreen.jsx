@@ -33,7 +33,7 @@ function StarIcon({ filled, hovered, onMouseEnter, onMouseLeave, onClick, size =
 }
 
 // Order Feedback Form & Confirmation Card Component
-function OrderFeedbackCard({ order, onSubmitFeedback, isModal = false, onCloseModal }) {
+export function OrderFeedbackCard({ order, onSubmitFeedback, isModal = false, onCloseModal }) {
   const [rating, setRating] = useState(order.rating || 0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [notes, setNotes] = useState(order.feedbackNotes || '');
