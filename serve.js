@@ -317,8 +317,8 @@ const server = http.createServer(async (req, res) => {
           studentId: `STU-${Math.floor(1000 + Math.random() * 9000)}`,
           department: 'To be added in profile',
           avatarUrl: '/avatar.jpg',
-          walletBalance: 500,
-          rewardPoints: 50,
+          walletBalance: 0,
+          rewardPoints: 0,
         };
         const token = jwt.sign(
           { id: demoUser.id, email: demoUser.email, role: demoUser.role },
@@ -327,7 +327,7 @@ const server = http.createServer(async (req, res) => {
         );
         return sendJson(res, 201, {
           success: true,
-          message: 'Account created! ₹500 Welcome Bonus credited to your Dining Wallet.',
+          message: 'Account created successfully! Welcome to FoodBooth.',
           token,
           user: demoUser,
         });
@@ -367,18 +367,12 @@ const server = http.createServer(async (req, res) => {
         } catch (_) {}
       }
 
-      // Create dining wallet with ₹500 welcome credit
+      // Create dining wallet with ₹0 balance
       try {
         await pool.query(
           `INSERT INTO wallets (user_id, balance, reward_points)
-           VALUES ($1, 500.00, 50)
-           ON CONFLICT (user_id) DO UPDATE SET balance = wallets.balance + 500.00;`,
-          [newUser.id]
-        );
-
-        await pool.query(
-          `INSERT INTO wallet_transactions (user_id, txn_type, amount, balance_after, reference)
-           VALUES ($1, 'credit', 500.00, 500.00, 'Welcome Mobile Signup Bonus');`,
+           VALUES ($1, 0.00, 0)
+           ON CONFLICT (user_id) DO NOTHING;`,
           [newUser.id]
         );
       } catch (_) {}
@@ -391,7 +385,7 @@ const server = http.createServer(async (req, res) => {
 
       return sendJson(res, 201, {
         success: true,
-        message: 'Account verified & created! ₹500 Welcome Bonus credited to your Dining Wallet.',
+        message: 'Account verified & created successfully!',
         token,
         user: {
           id: newUser.id,
@@ -402,8 +396,8 @@ const server = http.createServer(async (req, res) => {
           studentId: generatedRoll,
           department: 'To be added in profile',
           avatarUrl: newUser.avatar_url || '/avatar.jpg',
-          walletBalance: 500,
-          rewardPoints: 50,
+          walletBalance: 0,
+          rewardPoints: 0,
         },
       });
     } catch (err) {

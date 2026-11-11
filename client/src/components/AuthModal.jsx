@@ -208,7 +208,7 @@ export default function AuthModal({
         throw new Error(data.error || 'Registration failed.');
       }
 
-      setSuccessMessage(data.message || 'Account created! ₹500 credited to wallet.');
+      setSuccessMessage(data.message || 'Account created successfully!');
       setTimeout(() => {
         onAuthSuccess(data);
         onClose();
@@ -520,9 +520,9 @@ export default function AuthModal({
               {/* Profile Details Can Be Added Later Callout */}
               <div className="p-3 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
-                  <span className="text-xl">🎁</span>
+                  <span className="text-xl">📱</span>
                   <div>
-                    <p className="text-xs font-black text-orange-950">Quick Mobile Sign Up + ₹500 Bonus</p>
+                    <p className="text-xs font-black text-orange-950">Quick Mobile Sign Up</p>
                     <p className="text-[11px] text-orange-800">
                       Email, ID, department & meal preferences can be added later in your profile!
                     </p>
@@ -637,7 +637,7 @@ export default function AuthModal({
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <span>Verify & Create Account (Claim ₹500 Bonus)</span>
+                    <span>Verify & Create Account</span>
                     <span>→</span>
                   </>
                 )}
