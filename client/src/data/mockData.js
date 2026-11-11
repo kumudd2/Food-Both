@@ -327,6 +327,9 @@ export const INITIAL_ORDERS = [
     gst: 7,
     discount: 0,
     total: 147,
+    feedbackRating: 5,
+    feedbackNotes: 'Thali was hot, fresh and delicious! Quick handover.',
+    feedbackSubmittedAt: '12:18 PM',
   },
 ];
 

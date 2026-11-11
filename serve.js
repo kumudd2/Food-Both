@@ -75,6 +75,17 @@ async function checkDatabase() {
     try {
       const res = await client.query("SELECT to_regclass('public.menu_items') as tbl_exists;");
       const hasTable = Boolean(res.rows[0] && res.rows[0].tbl_exists);
+      if (hasTable) {
+        try {
+          await client.query(`
+            ALTER TABLE orders 
+            ADD COLUMN IF NOT EXISTS rating INT,
+            ADD COLUMN IF NOT EXISTS feedback_notes TEXT,
+            ADD COLUMN IF NOT EXISTS feedback_tags TEXT,
+            ADD COLUMN IF NOT EXISTS feedback_at TIMESTAMPTZ;
+          `);
+        } catch (_) {}
+      }
       return {
         dbConnected: hasTable,
         database: 'PostgreSQL',
@@ -780,6 +791,10 @@ const server = http.createServer(async (req, res) => {
           o.status,
           o.total_amount as "total",
           o.subtotal,
+          o.rating,
+          o.feedback_notes as "feedbackNotes",
+          o.feedback_tags as "feedbackTags",
+          o.feedback_at as "feedbackAt",
           COALESCE(u.full_name, 'Student') as "customerName",
           COALESCE(sp.roll_number, 'STU-2024') as "studentId",
           COALESCE(RIGHT(o.pickup_qr_token, 4), '4821') as "pin",
@@ -877,6 +892,40 @@ const server = http.createServer(async (req, res) => {
         [data.status, orderNum]
       );
       return sendJson(res, 200, { dbConnected: true, success: true, status: data.status });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
+  // POST Customer Order Feedback (Rating & Notes)
+  if (pathname.startsWith('/api/orders/') && pathname.endsWith('/feedback') && req.method === 'POST') {
+    try {
+      const orderNum = pathname.replace('/api/orders/', '').replace('/feedback', '');
+      const data = await parseJson(req);
+      const rating = Number(data.rating) || 5;
+      const notes = (data.notes || '').trim();
+      const tags = Array.isArray(data.tags) ? data.tags.join(', ') : (data.tags || '');
+
+      const dbInfo = await checkDatabase();
+      if (dbInfo.dbConnected) {
+        await pool.query(
+          `UPDATE orders 
+           SET rating = $1, feedback_notes = $2, feedback_tags = $3, feedback_at = NOW() 
+           WHERE order_number = $4 OR id::text = $4;`,
+          [rating, notes, tags, orderNum]
+        );
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        message: 'Feedback submitted successfully! Thank you.',
+        feedback: {
+          rating,
+          feedbackNotes: notes,
+          feedbackTags: tags,
+          feedbackAt: new Date().toISOString(),
+        },
+      });
     } catch (err) {
       return sendJson(res, 500, { error: err.message });
     }

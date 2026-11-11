@@ -363,6 +363,36 @@ export default function App() {
     showToast(`Loaded items from ${pastOrder.id}`);
   };
 
+  // Submit Customer Order Feedback
+  const handleSubmitFeedback = (orderId, feedbackData) => {
+    const { rating, notes, tags } = feedbackData;
+    const nowIso = new Date().toISOString();
+
+    setOrders((prev) =>
+      prev.map((ord) => {
+        if (ord.id === orderId) {
+          return {
+            ...ord,
+            rating,
+            feedbackNotes: notes,
+            feedbackTags: tags,
+            feedbackAt: nowIso,
+          };
+        }
+        return ord;
+      })
+    );
+
+    showToast(`Thank you! Rated ${rating} ⭐ for order ${orderId}`);
+
+    // If backend is reachable, persist feedback to PostgreSQL
+    fetch(`/api/orders/${orderId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating, notes, tags }),
+    }).catch((err) => console.log('Feedback sync notice:', err.message));
+  };
+
   // Recharge Wallet
   const handleRechargeWallet = (amount) => {
     const newBal = user.walletBalance + amount;
@@ -524,6 +554,7 @@ export default function App() {
                   activeOrder={activeOrder}
                   allOrders={orders}
                   onReorder={handleReorder}
+                  onSubmitFeedback={handleSubmitFeedback}
                 />
               )}
 

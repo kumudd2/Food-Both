@@ -1269,6 +1269,29 @@ function OrderDetailModal({ order, onClose, onAdvanceStatus, onCancelOrder }) {
             </div>
           </div>
 
+          {/* Customer Feedback Audit */}
+          {order.rating && (
+            <div className="bg-amber-50/80 p-3.5 rounded-2xl border border-amber-200 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-amber-950 flex items-center space-x-1">
+                  <span>⭐ Customer Feedback:</span>
+                  <span className="text-amber-500 font-black">{'★'.repeat(order.rating)}</span>
+                  <span>({order.rating}/5)</span>
+                </span>
+                {order.feedbackTags && (
+                  <span className="text-[10px] font-bold text-amber-900 bg-amber-200/60 px-2 py-0.5 rounded-full">
+                    {order.feedbackTags}
+                  </span>
+                )}
+              </div>
+              {order.feedbackNotes && (
+                <p className="text-[11px] text-slate-700 italic bg-white/80 p-2 rounded-xl border border-amber-100">
+                  "{order.feedbackNotes}"
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Total Summary */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
             <div className="flex justify-between text-slate-500">
