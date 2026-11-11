@@ -1206,9 +1206,7 @@ function OrderDetailModal({ order, onClose, onAdvanceStatus, onCancelOrder }) {
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-mono font-bold text-xs">
-              FB
-            </div>
+            <img src="/logo.png" alt="FoodBooth Logo" className="w-8 h-8 object-contain" />
             <div>
               <span className="font-mono font-black text-sm text-slate-900 block">{order.id}</span>
               <span className="text-xs text-slate-400">Order Audit Verification</span>

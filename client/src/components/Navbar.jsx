@@ -47,9 +47,11 @@ export default function Navbar({
             className="flex items-center space-x-2.5 cursor-pointer shrink-0"
             onClick={() => setActiveTab(role === 'admin' ? 'kds' : 'menu')}
           >
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-black tracking-tighter shadow-xs">
-              FB
-            </div>
+            <img
+              src="/logo.png"
+              alt="FoodBooth Logo"
+              className="w-9 h-9 object-contain drop-shadow-xs transition-transform duration-200 hover:scale-105"
+            />
             <div className="flex items-center space-x-2">
               <span className="font-extrabold text-slate-900 tracking-tight text-base font-display">
                 Food<span className="text-[#ab3500]">Booth</span>
