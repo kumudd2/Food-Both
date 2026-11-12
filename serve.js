@@ -330,10 +330,14 @@ const server = http.createServer(async (req, res) => {
       const phone = cleanPhoneNumber(rawPhone);
       const password = data.password || '';
       const otp = (data.otp || '').trim();
-      let role = (data.role || 'student').toLowerCase();
-      if (!['student', 'staff', 'admin'].includes(role)) {
-        role = 'student';
+
+      // Kitchen staff and admin accounts can NEVER be created via public signup
+      if (data.role && (data.role === 'staff' || data.role === 'admin')) {
+        return sendJson(res, 403, {
+          error: 'Kitchen staff accounts cannot be created via public signup. Staff IDs can only be created by the cafeteria admin.',
+        });
       }
+      const role = 'student';
 
       if (!fullName) return sendJson(res, 400, { error: 'Please enter your full name.' });
       if (!phone || phone.length < 8) return sendJson(res, 400, { error: 'Please provide a valid mobile number.' });
@@ -682,6 +686,147 @@ const server = http.createServer(async (req, res) => {
           walletBalance: Number(u.wallet_balance || 0),
           rewardPoints: Number(u.reward_points || 0),
         },
+      });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
+  // -------------------------------------------------------------
+  // KITCHEN STAFF MANAGEMENT ENDPOINTS (ADMIN ONLY, MAX 2 STAFF)
+  // -------------------------------------------------------------
+
+  // GET /api/admin/staff (List staff accounts - max 2 allowed)
+  if (pathname === '/api/admin/staff' && req.method === 'GET') {
+    try {
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        return sendJson(res, 200, {
+          dbConnected: false,
+          staff: [
+            {
+              id: '22222222-2222-2222-2222-222222222222',
+              name: 'Chef Ramesh Kumar',
+              email: 'ramesh.counter1@college.edu',
+              phone: '+91 98765 43211',
+              role: 'staff',
+              createdAt: 'Initial',
+            },
+          ],
+          maxStaff: 2,
+          currentCount: 1,
+        });
+      }
+
+      const staffRes = await pool.query(`
+        SELECT id, full_name as name, email, phone, role, created_at as "createdAt"
+        FROM users
+        WHERE role = 'staff'
+        ORDER BY created_at ASC;
+      `);
+
+      return sendJson(res, 200, {
+        dbConnected: true,
+        staff: staffRes.rows,
+        maxStaff: 2,
+        currentCount: staffRes.rows.length,
+      });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
+  // POST /api/admin/staff (Create new staff account - max 2 allowed)
+  if (pathname === '/api/admin/staff' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const fullName = (data.name || data.fullName || '').trim();
+      const rawIdentifier = (data.email || data.identifier || '').trim().toLowerCase();
+      const rawPhone = (data.phone || '').trim();
+      const phone = cleanPhoneNumber(rawPhone);
+      const password = data.password || '';
+
+      if (!fullName) {
+        return sendJson(res, 400, { error: 'Please enter staff member name.' });
+      }
+      if (!rawIdentifier && !phone) {
+        return sendJson(res, 400, { error: 'Please enter a staff email or mobile number for login.' });
+      }
+      if (!password || password.length < 6) {
+        return sendJson(res, 400, { error: 'Password must be at least 6 characters long.' });
+      }
+
+      const email = rawIdentifier.includes('@')
+        ? rawIdentifier
+        : `${(rawIdentifier || phone).replace(/[^a-z0-9]/g, '')}@foodbooth.staff`;
+
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        return sendJson(res, 400, { error: 'Database is offline or not connected.' });
+      }
+
+      // Strict enforcement: Max 2 staff members permitted
+      const countRes = await pool.query("SELECT COUNT(*) as count FROM users WHERE role = 'staff';");
+      const currentCount = parseInt(countRes.rows[0].count, 10);
+      if (currentCount >= 2) {
+        return sendJson(res, 400, {
+          error: 'Maximum limit reached: Only 2 kitchen staff accounts are allowed. You must delete an existing staff account first.',
+        });
+      }
+
+      // Check if email or phone already exists
+      const existing = await pool.query(
+        'SELECT id FROM users WHERE email = $1 OR (phone IS NOT NULL AND phone = $2);',
+        [email, phone || 'nonexistent']
+      );
+      if (existing.rows.length > 0) {
+        return sendJson(res, 400, { error: 'An account with this email or mobile number already exists.' });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      const insertRes = await pool.query(`
+        INSERT INTO users (full_name, email, phone, password_hash, role, is_active)
+        VALUES ($1, $2, $3, $4, 'staff', TRUE)
+        RETURNING id, full_name as name, email, phone, role, created_at as "createdAt";
+      `, [fullName, email, phone || null, passwordHash]);
+
+      return sendJson(res, 201, {
+        success: true,
+        message: `Staff login account created for ${fullName}!`,
+        staff: insertRes.rows[0],
+      });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
+  // DELETE /api/admin/staff/:staffId (Delete staff account)
+  if (pathname.startsWith('/api/admin/staff/') && req.method === 'DELETE') {
+    try {
+      const staffId = pathname.replace('/api/admin/staff/', '').trim();
+      if (!staffId) {
+        return sendJson(res, 400, { error: 'Staff ID is required.' });
+      }
+
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        return sendJson(res, 400, { error: 'Database is offline.' });
+      }
+
+      // Safety check: ONLY allow deleting users with role 'staff'
+      const delRes = await pool.query(
+        "DELETE FROM users WHERE (id::text = $1 OR email = $1) AND role = 'staff' RETURNING id, full_name as name, email;",
+        [staffId]
+      );
+
+      if (delRes.rows.length === 0) {
+        return sendJson(res, 404, { error: 'Staff account not found or cannot be deleted.' });
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        message: `Staff member ${delRes.rows[0].name} deleted successfully.`,
+        deleted: delRes.rows[0],
       });
     } catch (err) {
       return sendJson(res, 500, { error: err.message });

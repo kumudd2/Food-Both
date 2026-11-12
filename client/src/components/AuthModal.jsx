@@ -312,7 +312,11 @@ export default function AuthModal({
             </button>
             <button
               type="button"
-              onClick={() => setSelectedRole(selectedRole === 'admin' ? 'admin' : 'staff')}
+              onClick={() => {
+                setSelectedRole(selectedRole === 'admin' ? 'admin' : 'staff');
+                setMode('login');
+                setErrorMessage('');
+              }}
               className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-extrabold transition text-center cursor-pointer flex items-center justify-center space-x-1.5 ${
                 selectedRole === 'staff' || selectedRole === 'admin'
                   ? 'bg-white text-slate-900 shadow-xs'
@@ -497,19 +501,31 @@ export default function AuthModal({
               </button>
 
               <div className="text-center pt-1">
-                <p className="text-xs text-slate-500">
-                  New student or customer?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('signup');
-                      setErrorMessage('');
-                    }}
-                    className="font-bold text-[#ab3500] hover:underline cursor-pointer"
-                  >
-                    Quick Mobile Sign Up (30s)
-                  </button>
-                </p>
+                {selectedRole === 'staff' || selectedRole === 'admin' ? (
+                  <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-center">
+                    <p className="text-[11px] font-black text-amber-950 flex items-center justify-center space-x-1">
+                      <span>🔒</span>
+                      <span>Kitchen Staff Sign-In Only</span>
+                    </p>
+                    <p className="text-[10px] text-amber-800 mt-0.5 leading-relaxed">
+                      Staff accounts can only be created by the Cafeteria Admin in the Admin Portal (maximum 2 staff members).
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    New student or customer?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('signup');
+                        setErrorMessage('');
+                      }}
+                      className="font-bold text-[#ab3500] hover:underline cursor-pointer"
+                    >
+                      Quick Mobile Sign Up (30s)
+                    </button>
+                  </p>
+                )}
               </div>
             </form>
           ) : (

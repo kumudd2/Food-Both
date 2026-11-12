@@ -589,6 +589,8 @@ export default function App() {
               onDeleteDish={handleDeleteDish}
               adminTab={adminTab}
               onTabChange={setAdminTab}
+              user={user}
+              showToast={showToast}
             />
           ) : (
             <>

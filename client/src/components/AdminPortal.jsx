@@ -27,10 +27,118 @@ export default function AdminPortal({
   onDeleteDish,
   adminTab = 'kds',
   onTabChange,
+  user = {},
+  showToast,
 }) {
   // Sync tab with parent or internal fallback
   const activeTab = adminTab || 'kds';
   const setActiveTab = onTabChange || (() => {});
+
+  // Kitchen Staff Management State (Admin Only, Max 2 Staff)
+  const isCafeteriaAdmin = user?.role === 'admin';
+  const [staffList, setStaffList] = React.useState([]);
+  const [staffLoading, setStaffLoading] = React.useState(false);
+  const [newStaffName, setNewStaffName] = React.useState('');
+  const [newStaffEmail, setNewStaffEmail] = React.useState('');
+  const [newStaffPhone, setNewStaffPhone] = React.useState('');
+  const [newStaffPassword, setNewStaffPassword] = React.useState('');
+  const [newStaffCounter, setNewStaffCounter] = React.useState('Counter 1 (Fast Food)');
+  const [staffSubmitting, setStaffSubmitting] = React.useState(false);
+  const [staffError, setStaffError] = React.useState('');
+  const [staffSuccess, setStaffSuccess] = React.useState('');
+  const [deletingStaff, setDeletingStaff] = React.useState(null);
+
+  const fetchStaffMembers = React.useCallback(async () => {
+    setStaffLoading(true);
+    try {
+      const res = await fetch('/api/admin/staff');
+      const data = await res.json();
+      if (data && Array.isArray(data.staff)) {
+        setStaffList(data.staff);
+      }
+    } catch (_) {}
+    setStaffLoading(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (isCafeteriaAdmin) {
+      fetchStaffMembers();
+    }
+  }, [isCafeteriaAdmin, fetchStaffMembers]);
+
+  const handleCreateStaff = async (e) => {
+    e.preventDefault();
+    setStaffError('');
+    setStaffSuccess('');
+
+    if (staffList.length >= 2) {
+      setStaffError('Maximum limit of 2 staff accounts reached. Delete an existing staff member first.');
+      return;
+    }
+
+    if (!newStaffName.trim()) {
+      setStaffError('Please enter the staff member full name.');
+      return;
+    }
+
+    if (!newStaffEmail.trim() && !newStaffPhone.trim()) {
+      setStaffError('Please enter an email or phone number for staff login.');
+      return;
+    }
+
+    if (!newStaffPassword || newStaffPassword.length < 6) {
+      setStaffError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setStaffSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newStaffName.trim(),
+          email: newStaffEmail.trim(),
+          phone: newStaffPhone.trim(),
+          password: newStaffPassword,
+          counter: newStaffCounter,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStaffError(data.error || 'Failed to create staff account.');
+      } else {
+        setStaffSuccess(`Staff ID created for ${newStaffName}! Login credentials are active.`);
+        setNewStaffName('');
+        setNewStaffEmail('');
+        setNewStaffPhone('');
+        setNewStaffPassword('');
+        fetchStaffMembers();
+        if (showToast) showToast(`Staff ID created for ${newStaffName}`);
+      }
+    } catch (err) {
+      setStaffError(err.message || 'Network error while creating staff.');
+    }
+    setStaffSubmitting(false);
+  };
+
+  const handleDeleteStaff = async (staffMember) => {
+    try {
+      const res = await fetch(`/api/admin/staff/${staffMember.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (showToast) showToast(data.error || 'Failed to delete staff member');
+      } else {
+        if (showToast) showToast(`Deleted staff ID for ${staffMember.name}`);
+        setDeletingStaff(null);
+        fetchStaffMembers();
+      }
+    } catch (err) {
+      if (showToast) showToast('Error deleting staff member');
+    }
+  };
 
   // KDS State
   const [filterCounter, setFilterCounter] = React.useState('all');
@@ -172,6 +280,9 @@ export default function AdminPortal({
             { id: 'inventory', label: 'Stock & Menu' },
             { id: 'sales', label: 'Daily Sales & Analytics' },
             { id: 'all_orders', label: 'Orders Audit Log' },
+            ...(isCafeteriaAdmin
+              ? [{ id: 'staff', label: 'Staff Accounts', badge: `${staffList.length}/2` }]
+              : []),
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -922,7 +1033,311 @@ export default function AdminPortal({
         </div>
       )}
 
+            {/* ========================================================= */}
+      {/* 5. KITCHEN STAFF ACCOUNTS MANAGEMENT (ADMIN ONLY)        */}
       {/* ========================================================= */}
+      {activeTab === 'staff' && isCafeteriaAdmin && (
+        <div className="space-y-6">
+          {/* Top Banner Card */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-5 sm:p-6 rounded-3xl shadow-lg border border-slate-700/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2.5">
+                <span className="text-2xl">👨‍🍳</span>
+                <h2 className="text-lg sm:text-xl font-black tracking-tight font-display text-white">
+                  Kitchen Staff ID Management
+                </h2>
+                <span className="text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                  Admin Control
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 max-w-xl">
+                Create and delete login accounts for your kitchen staff. For strict counter security and orderly meal preparation, a maximum limit of <strong>2 kitchen staff members</strong> is allowed.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-3 shrink-0">
+              <div className="bg-slate-800/90 border border-slate-700 rounded-2xl px-4 py-2.5 text-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Staff Quota
+                </span>
+                <span className="text-lg font-black text-amber-300 font-mono">
+                  {staffList.length} / 2
+                </span>
+              </div>
+              {staffList.length >= 2 ? (
+                <div className="bg-rose-950/60 border border-rose-800 text-rose-300 px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center space-x-1.5">
+                  <span>⛔</span>
+                  <span>Limit Reached (2/2)</span>
+                </div>
+              ) : (
+                <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-300 px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center space-x-1.5">
+                  <span>🟢</span>
+                  <span>{2 - staffList.length} Slot Available</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Form & List Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left: Create Staff Form (5 cols) */}
+            <div className="lg:col-span-5 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-2xs">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <div>
+                  <h3 className="font-black text-slate-900 text-sm font-display">
+                    Create New Staff Login ID
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Credentials can be used to log in on the staff portal
+                  </p>
+                </div>
+                <span className="text-xs font-black text-slate-400 font-mono">
+                  {staffList.length >= 2 ? '0 left' : `${2 - staffList.length} left`}
+                </span>
+              </div>
+
+              {staffList.length >= 2 ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg">⚠️</span>
+                    <h4 className="font-black text-xs">Maximum 2 Staff Limit Reached</h4>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    You currently have 2 active kitchen staff members. To add a new staff person, you must first delete one of the existing staff accounts on the right.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateStaff} className="space-y-3.5">
+                  {staffError && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in">
+                      <span>⚠️</span>
+                      <span>{staffError}</span>
+                    </div>
+                  )}
+
+                  {staffSuccess && (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in">
+                      <span>✅</span>
+                      <span>{staffSuccess}</span>
+                    </div>
+                  )}
+
+                  {/* Staff Name */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Staff Member Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newStaffName}
+                      onChange={(e) => setNewStaffName(e.target.value)}
+                      placeholder="e.g. Chef Suresh Kumar"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Email / Login ID */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Staff Login Email / ID
+                    </label>
+                    <input
+                      type="text"
+                      value={newStaffEmail}
+                      onChange={(e) => setNewStaffEmail(e.target.value)}
+                      placeholder="e.g. suresh.counter2@college.edu or suresh2"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Mobile Number (Optional)
+                    </label>
+                    <input
+                      type="tel"
+                      value={newStaffPhone}
+                      onChange={(e) => setNewStaffPhone(e.target.value)}
+                      placeholder="e.g. +91 98765 12345"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Initial Password */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Initial Password
+                    </label>
+                    <input
+                      type="password"
+                      value={newStaffPassword}
+                      onChange={(e) => setNewStaffPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                      required
+                      minLength={6}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  {/* Assigned Counter */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Assigned Counter
+                    </label>
+                    <select
+                      value={newStaffCounter}
+                      onChange={(e) => setNewStaffCounter(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition"
+                    >
+                      <option value="Counter 1 (Fast Food)">Counter 1 (Fast Food)</option>
+                      <option value="Counter 2 (South Indian & Meals)">Counter 2 (South Indian & Meals)</option>
+                      <option value="Counter 3 (Bakery & Drinks)">Counter 3 (Bakery & Drinks)</option>
+                    </select>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={staffSubmitting}
+                    className="w-full mt-2 py-3 px-4 rounded-xl bg-[#ab3500] hover:bg-[#8f2c00] active:scale-98 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-2"
+                  >
+                    {staffSubmitting ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        <PlusIcon className="w-4 h-4" />
+                        <span>Create Kitchen Staff ID</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* Right: Active Staff Members (7 cols) */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                  <div>
+                    <h3 className="font-black text-slate-900 text-sm font-display">
+                      Active Kitchen Staff Members
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      These accounts have live access to the Kitchen Staff KDS Portal
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl">
+                    {staffList.length} / 2 active
+                  </span>
+                </div>
+
+                {staffLoading ? (
+                  <div className="py-12 text-center text-xs text-slate-400 font-bold">
+                    Loading staff accounts...
+                  </div>
+                ) : staffList.length === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <span className="text-3xl">👨‍🍳</span>
+                    <p className="text-xs font-bold text-slate-600">No kitchen staff accounts created yet.</p>
+                    <p className="text-[11px] text-slate-400">
+                      Use the form on the left to create up to 2 staff accounts.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {staffList.map((st, idx) => (
+                      <div
+                        key={st.id || idx}
+                        className="p-4 rounded-2xl border border-slate-200/90 hover:border-slate-300 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
+                      >
+                        <div className="flex items-start sm:items-center space-x-3.5">
+                          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {st.name ? st.name.charAt(0).toUpperCase() : 'S'}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-black text-xs text-slate-900">{st.name}</h4>
+                              <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900">
+                                Staff ID #{idx + 1}
+                              </span>
+                            </div>
+                            <div className="mt-1 space-y-0.5 text-[11px] text-slate-500">
+                              <p className="font-medium text-slate-700">
+                                <span className="font-bold text-slate-400">Login ID:</span> {st.email}
+                              </p>
+                              {st.phone && (
+                                <p className="font-medium text-slate-700">
+                                  <span className="font-bold text-slate-400">Phone:</span> {st.phone}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 self-end sm:self-center">
+                          <button
+                            type="button"
+                            onClick={() => setDeletingStaff(st)}
+                            className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 transition text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Delete ID</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: DELETE STAFF CONFIRMATION                          */}
+      {/* ========================================================= */}
+      {deletingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 animate-scale-up">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center font-bold text-lg">
+                🗑️
+              </div>
+              <div>
+                <h3 className="font-black text-sm text-slate-900">Delete Staff Account</h3>
+                <p className="text-[11px] text-slate-500">This action will immediately revoke login access.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+              Are you sure you want to delete staff account <strong className="text-slate-900 font-bold">{deletingStaff.name}</strong> (<span className="text-slate-600 font-mono text-[11px]">{deletingStaff.email}</span>)?
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingStaff(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteStaff(deletingStaff)}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-black shadow-sm transition cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+{/* ========================================================= */}
       {/* MODAL: ADD / EDIT DISH */}
       {/* ========================================================= */}
       {(isAddDishModalOpen || editingDish) && (
