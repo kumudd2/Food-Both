@@ -26,6 +26,17 @@ export default function Navbar({
       label: 'My Orders',
       badge: activeOrder && activeOrder.status !== 'collected' ? 'Live' : null,
     },
+    {
+      id: 'wallet',
+      label: 'Dining Wallet',
+      badge: walletBalance !== undefined && walletBalance > 0 ? `₹${Math.round(walletBalance)}` : null,
+    },
+  ];
+
+  const staffTabs = [
+    { id: 'kds', label: 'Kitchen KDS' },
+    { id: 'inventory', label: 'Stock & Menu' },
+    { id: 'all_orders', label: 'Orders Log' },
   ];
 
   const adminTabs = [
@@ -33,9 +44,15 @@ export default function Navbar({
     { id: 'inventory', label: 'Stock & Menu' },
     { id: 'sales', label: 'Daily Sales' },
     { id: 'all_orders', label: 'Orders Log' },
+    { id: 'staff', label: 'Staff Accounts' },
   ];
 
-  const currentTabs = role === 'admin' ? adminTabs : studentTabs;
+  const currentTabs =
+    user?.role === 'admin'
+      ? adminTabs
+      : user?.role === 'staff'
+      ? staffTabs
+      : studentTabs;
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 w-full shadow-xs">
@@ -56,7 +73,7 @@ export default function Navbar({
                 Food<span className="text-[#ab3500]">Booth</span>
               </span>
               <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-slate-200 text-slate-500 bg-slate-50 hidden sm:inline-block">
-                {role === 'admin' ? 'Staff Portal' : 'Food Court'}
+                {user?.role === 'admin' ? 'Admin Portal' : user?.role === 'staff' ? 'Kitchen KDS' : 'Food Court'}
               </span>
               {dbStatus?.connected ? (
                 <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50 hidden md:inline-flex items-center space-x-1" title="Connected to PostgreSQL Database">
@@ -79,7 +96,13 @@ export default function Navbar({
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    if (item.id === 'wallet' && onOpenWallet) {
+                      onOpenWallet();
+                    } else {
+                      setActiveTab(item.id);
+                    }
+                  }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
                     isActive
                       ? 'bg-slate-900 text-white shadow-xs'
@@ -152,7 +175,7 @@ export default function Navbar({
                       {user.name?.split(' ')[0] || 'User'}
                     </span>
                     <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                      {user.role === 'admin' ? 'Staff' : 'Student'}
+                      {user.role === 'admin' ? 'Admin' : user.role === 'staff' ? 'Staff' : 'Student'}
                     </span>
                   </div>
                   <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,7 +190,7 @@ export default function Navbar({
                       <p className="font-extrabold text-slate-900 truncate">{user.name}</p>
                       <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
                       <span className="mt-1 inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-[#ab3500]">
-                        {user.role === 'admin' ? 'Cafeteria Staff / Admin' : 'Campus Student'}
+                        {user.role === 'admin' ? 'Cafeteria Admin' : user.role === 'staff' ? 'Kitchen Staff' : 'Campus Student'}
                       </span>
                     </div>
 
@@ -251,7 +274,11 @@ export default function Navbar({
               <button
                 key={item.id}
                 onClick={() => {
-                  setActiveTab(item.id);
+                  if (item.id === 'wallet' && onOpenWallet) {
+                    onOpenWallet();
+                  } else {
+                    setActiveTab(item.id);
+                  }
                   setMobileMenuOpen(false);
                 }}
                 className={`px-3 py-2 rounded-xl text-xs font-bold text-left flex items-center justify-between ${
@@ -344,6 +371,41 @@ export default function Navbar({
             )}
           </div>
         )}
+      </div>
+
+      {/* Mobile Horizontal Quick Navigation Bar on Home Page */}
+      <div className="md:hidden flex items-center space-x-1.5 px-4 py-2 bg-slate-50/90 border-t border-slate-100 overflow-x-auto no-scrollbar">
+        {currentTabs.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                if (item.id === 'wallet' && onOpenWallet) {
+                  onOpenWallet();
+                } else {
+                  setActiveTab(item.id);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                isActive
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 bg-white border border-slate-200/80 hover:bg-slate-100'
+              }`}
+            >
+              <span>{item.label}</span>
+              {item.badge && (
+                <span
+                  className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-[#ab3500] text-white'
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </header>
   );

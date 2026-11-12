@@ -275,7 +275,9 @@ export default function AdminPortal({
           {[
             { id: 'kds', label: 'Kitchen Queue', badge: incoming.length + cooking.length },
             { id: 'inventory', label: 'Stock & Menu' },
-            { id: 'sales', label: 'Daily Sales & Analytics' },
+            ...(isCafeteriaAdmin
+              ? [{ id: 'sales', label: 'Daily Sales & Analytics' }]
+              : []),
             { id: 'all_orders', label: 'Orders Audit Log' },
             ...(isCafeteriaAdmin
               ? [{ id: 'staff', label: 'Staff & Admin Accounts', badge: staffList.length }]
