@@ -43,6 +43,7 @@ export default function Navbar({
     { id: 'kds', label: 'Kitchen KDS' },
     { id: 'inventory', label: 'Stock & Menu' },
     { id: 'sales', label: 'Daily Sales' },
+    { id: 'feedbacks', label: 'Feedbacks' },
     { id: 'all_orders', label: 'Orders Log' },
     { id: 'staff', label: 'Staff Accounts' },
   ];

@@ -1158,6 +1158,33 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // GET General Cafeteria Feedbacks (Admin Portal Only)
+  if (pathname === '/api/feedback' && req.method === 'GET') {
+    try {
+      const dbInfo = await checkDatabase();
+      if (!dbInfo.dbConnected) {
+        return sendJson(res, 200, { feedbacks: [] });
+      }
+
+      const feedbackRes = await pool.query(`
+        SELECT 
+          id,
+          student_name as "studentName",
+          rating,
+          category,
+          feedback_notes as "feedbackNotes",
+          to_char(created_at, 'Mon DD, YYYY • HH12:MI AM') as "createdAt",
+          created_at as "timestamp"
+        FROM cafeteria_feedback
+        ORDER BY id DESC LIMIT 200;
+      `);
+
+      return sendJson(res, 200, { feedbacks: feedbackRes.rows });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
   // GET Wallet from PostgreSQL
   if (pathname === '/api/wallet' && req.method === 'GET') {
     try {

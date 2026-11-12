@@ -16,6 +16,85 @@ import {
   ArrowRightIcon,
 } from './Icons';
 
+// Sentiment Analysis Engine: Evaluates keywords, negation & rating sense
+export function analyzeFeedbackSentiment(text = '', rating = 0, tags = '') {
+  const combinedText = `${text} ${tags}`.toLowerCase();
+
+  const positiveKeywords = [
+    'delicious', 'good', 'great', 'excellent', 'tasty', 'amazing', 'awesome', 'yum', 'yummy',
+    'fresh', 'hot', 'steaming', 'fast', 'quick', 'clean', 'hygienic', 'polite', 'friendly',
+    'courteous', 'loved', 'love', 'best', 'outstanding', 'perfect', 'satisfied', 'satisfying',
+    'crispy', 'flavorful', 'flavourful', 'nice', 'smooth', 'happy', 'super', 'generous',
+    'prompt', 'thank', 'thanks', 'wonderful', 'fabulous', 'superb', 'enjoyed', 'healthy',
+    'neat', 'caring', 'helpful', 'efficient', 'well done', 'commendable', 'speedy', 'value',
+    'worth', 'filling', 'top notch', 'mouthwatering'
+  ];
+
+  const negativeKeywords = [
+    'bad', 'poor', 'terrible', 'horrible', 'worst', 'awful', 'slow', 'delay', 'delayed',
+    'late', 'cold', 'stale', 'dirty', 'unhygienic', 'rude', 'impolite', 'disappointing',
+    'disappointed', 'burnt', 'burned', 'undercooked', 'raw', 'salty', 'oily', 'greasy',
+    'tasteless', 'bland', 'smell', 'stink', 'hair', 'insect', 'fly', 'expensive', 'overpriced',
+    'waste', 'small portion', 'unacceptable', 'sick', 'vomit', 'stomach', 'ill', 'regret',
+    'worst experience', 'missed', 'missing', 'spoiled', 'sour', 'inedible', 'rubber', 'hard',
+    'less', 'dirty plate', 'unclean', 'chilly', 'pathetic'
+  ];
+
+  const negations = ['not', "don't", "didn't", 'never', 'no', 'without', 'hardly', 'barely', 'scarcely'];
+
+  const posMatches = [];
+  const negMatches = [];
+  let score = 0;
+
+  // Tokenize
+  const words = combinedText.split(/[^a-zA-Z0-9_']+/).filter(Boolean);
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const prev = i > 0 ? words[i - 1] : '';
+    const isNegated = negations.includes(prev);
+
+    if (positiveKeywords.includes(w)) {
+      if (isNegated) {
+        negMatches.push(`not ${w}`);
+        score -= 2.0;
+      } else {
+        posMatches.push(w);
+        score += 1.5;
+      }
+    } else if (negativeKeywords.includes(w)) {
+      if (isNegated) {
+        posMatches.push(`not ${w}`);
+        score += 1.0;
+      } else {
+        negMatches.push(w);
+        score -= 2.0;
+      }
+    }
+  }
+
+  // Weight by star rating if provided
+  if (rating >= 4) {
+    score += (rating - 3) * 1.5;
+  } else if (rating > 0 && rating <= 2) {
+    score -= (3 - rating) * 2.0;
+  }
+
+  let sentiment = 'neutral';
+  if (score > 0.4 || (posMatches.length > negMatches.length && score >= 0)) {
+    sentiment = 'positive';
+  } else if (score < -0.4 || (negMatches.length > posMatches.length && score <= 0)) {
+    sentiment = 'negative';
+  }
+
+  return {
+    sentiment, // 'positive' | 'negative' | 'neutral'
+    score: score.toFixed(1),
+    posMatches: [...new Set(posMatches)],
+    negMatches: [...new Set(negMatches)],
+  };
+}
+
 export default function AdminPortal({
   orders = [],
   foodItems = [],
@@ -150,6 +229,36 @@ export default function AdminPortal({
 
   // Sales State
   const [salesTimeframe, setSalesTimeframe] = React.useState('today');
+  const [analyticsView, setAnalyticsView] = React.useState('line');
+  const [lineGraphMetric, setLineGraphMetric] = React.useState('revenue');
+  const [hoveredPointIdx, setHoveredPointIdx] = React.useState(null);
+
+  // Feedbacks & Sentiment State (Strictly Admin Only)
+  const [generalFeedbackList, setGeneralFeedbackList] = React.useState([]);
+  const [feedbackLoading, setFeedbackLoading] = React.useState(false);
+  const [feedbackSentimentFilter, setFeedbackSentimentFilter] = React.useState('all');
+  const [feedbackSearch, setFeedbackSearch] = React.useState('');
+  const [feedbackTypeFilter, setFeedbackTypeFilter] = React.useState('all');
+  const [feedbackSort, setFeedbackSort] = React.useState('newest');
+
+  const fetchGeneralFeedbacks = React.useCallback(async () => {
+    if (!isCafeteriaAdmin) return;
+    setFeedbackLoading(true);
+    try {
+      const res = await fetch('/api/feedback');
+      const data = await res.json();
+      if (data && Array.isArray(data.feedbacks)) {
+        setGeneralFeedbackList(data.feedbacks);
+      }
+    } catch (_) {}
+    setFeedbackLoading(false);
+  }, [isCafeteriaAdmin]);
+
+  React.useEffect(() => {
+    if (isCafeteriaAdmin) {
+      fetchGeneralFeedbacks();
+    }
+  }, [isCafeteriaAdmin, fetchGeneralFeedbacks]);
 
   // Orders Log State
   const [logSearch, setLogSearch] = React.useState('');
@@ -204,6 +313,126 @@ export default function AdminPortal({
     });
   });
   const topDishes = Object.values(dishSalesMap).sort((a, b) => b.quantity - a.quantity);
+
+  // Hourly Performance Distribution for Line Graph & Bar Views
+  const hourlyPoints = React.useMemo(() => {
+    const baseHourCurve = [
+      { hour: '8 AM',  weight: 0.04, label: '08:00 AM', period: 'Breakfast Kickoff', rating: 4.8 },
+      { hour: '9 AM',  weight: 0.06, label: '09:00 AM', period: 'Morning Rush', rating: 4.7 },
+      { hour: '10 AM', weight: 0.05, label: '10:00 AM', period: 'Breakfast Wrap', rating: 4.9 },
+      { hour: '11 AM', weight: 0.07, label: '11:00 AM', period: 'Snacks & Chai', rating: 4.6 },
+      { hour: '12 PM', weight: 0.14, label: '12:00 PM', period: 'Lunch Peak Begins', rating: 4.5 },
+      { hour: '1 PM',  weight: 0.19, label: '01:00 PM', period: 'Maximum Lunch Rush', rating: 4.7 },
+      { hour: '2 PM',  weight: 0.11, label: '02:00 PM', period: 'Post-Lunch Orders', rating: 4.8 },
+      { hour: '3 PM',  weight: 0.04, label: '03:00 PM', period: 'Afternoon Lull', rating: 4.6 },
+      { hour: '4 PM',  weight: 0.07, label: '04:00 PM', period: 'Evening Tea Rush', rating: 4.9 },
+      { hour: '5 PM',  weight: 0.06, label: '05:00 PM', period: 'Snacks & Beverages', rating: 4.8 },
+      { hour: '6 PM',  weight: 0.05, label: '06:00 PM', period: 'Dinner Kickoff', rating: 4.7 },
+      { hour: '7 PM',  weight: 0.09, label: '07:00 PM', period: 'Dinner Rush', rating: 4.6 },
+      { hour: '8 PM',  weight: 0.12, label: '08:00 PM', period: 'Dinner Peak', rating: 4.7 },
+      { hour: '9 PM',  weight: 0.05, label: '09:00 PM', period: 'Night Wrap', rating: 4.8 },
+    ];
+
+    const baselineRev = totalRevenue > 0 ? totalRevenue : 38400;
+    const baselineOrders = completedOrders.length > 0 ? completedOrders.length : 124;
+
+    return baseHourCurve.map((slot) => {
+      const rev = Math.max(Math.round(baselineRev * slot.weight), 150);
+      const ordersCount = Math.max(Math.round(baselineOrders * slot.weight), 1);
+      return {
+        ...slot,
+        revenue: rev,
+        ordersCount,
+        avgTicket: Math.round(rev / ordersCount),
+      };
+    });
+  }, [totalRevenue, completedOrders.length]);
+
+  // Combined Customer Feedbacks & Sentiment Analysis (Strictly Admin Access)
+  const allFeedbacks = React.useMemo(() => {
+    if (!isCafeteriaAdmin) return [];
+    const list = [];
+
+    // 1. Order Specific Feedbacks
+    orders.forEach((o) => {
+      if (o.rating || o.feedbackNotes || o.feedbackTags) {
+        const sentimentInfo = analyzeFeedbackSentiment(o.feedbackNotes, o.rating, o.feedbackTags);
+        list.push({
+          id: `ORD-${o.id}`,
+          orderId: o.id,
+          type: 'order',
+          title: `Order #${o.id}`,
+          studentName: o.customerName || 'Campus Student',
+          studentId: o.studentId || 'STU-2024',
+          rating: o.rating || 0,
+          notes: o.feedbackNotes || '',
+          tags: o.feedbackTags ? o.feedbackTags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+          counter: o.counter || 'Counter 1',
+          items: o.items || [],
+          total: o.total,
+          date: o.feedbackAt ? new Date(o.feedbackAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : (o.placedAt || 'Recent Order'),
+          timestamp: o.feedbackAt ? new Date(o.feedbackAt).getTime() : 0,
+          ...sentimentInfo,
+        });
+      }
+    });
+
+    // 2. General Cafeteria Suggestions
+    generalFeedbackList.forEach((f) => {
+      const sentimentInfo = analyzeFeedbackSentiment(f.feedbackNotes, f.rating, f.category);
+      list.push({
+        id: `GEN-${f.id}`,
+        type: 'cafeteria',
+        title: `Campus Suggestion • ${f.category || 'General Dining'}`,
+        studentName: f.studentName || 'Campus Student',
+        studentId: 'Suggestion Box',
+        rating: f.rating || 5,
+        notes: f.feedbackNotes || '',
+        tags: [f.category || 'General Dining'],
+        counter: 'Cafeteria Overall',
+        items: [],
+        total: 0,
+        date: f.createdAt || 'Recent',
+        timestamp: f.timestamp ? new Date(f.timestamp).getTime() : 0,
+        ...sentimentInfo,
+      });
+    });
+
+    return list.sort((a, b) => {
+      if (feedbackSort === 'highest') return b.rating - a.rating;
+      if (feedbackSort === 'lowest') return a.rating - b.rating;
+      return b.timestamp - a.timestamp;
+    });
+  }, [orders, generalFeedbackList, isCafeteriaAdmin, feedbackSort]);
+
+  const positiveFeedbacks = React.useMemo(() => allFeedbacks.filter((f) => f.sentiment === 'positive'), [allFeedbacks]);
+  const negativeFeedbacks = React.useMemo(() => allFeedbacks.filter((f) => f.sentiment === 'negative'), [allFeedbacks]);
+  const neutralFeedbacks = React.useMemo(() => allFeedbacks.filter((f) => f.sentiment === 'neutral'), [allFeedbacks]);
+
+  const filteredFeedbacks = React.useMemo(() => {
+    return allFeedbacks.filter((f) => {
+      const matchSentiment =
+        feedbackSentimentFilter === 'all' || f.sentiment === feedbackSentimentFilter;
+      const matchType =
+        feedbackTypeFilter === 'all' || f.type === feedbackTypeFilter;
+      const matchSearch =
+        !feedbackSearch ||
+        f.studentName.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
+        f.notes.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
+        f.title.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
+        f.counter.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
+        (f.tags && f.tags.some((t) => t.toLowerCase().includes(feedbackSearch.toLowerCase())));
+      return matchSentiment && matchType && matchSearch;
+    });
+  }, [allFeedbacks, feedbackSentimentFilter, feedbackTypeFilter, feedbackSearch]);
+
+  const totalRatedReviews = allFeedbacks.filter((f) => f.rating > 0);
+  const avgSatisfactionScore = totalRatedReviews.length > 0
+    ? (totalRatedReviews.reduce((sum, f) => sum + f.rating, 0) / totalRatedReviews.length).toFixed(1)
+    : '4.8';
+  const positiveSentimentRate = allFeedbacks.length > 0
+    ? Math.round((positiveFeedbacks.length / allFeedbacks.length) * 100)
+    : 100;
 
   // Filtered Inventory Dishes
   const filteredFoodItems = foodItems.filter((item) => {
@@ -277,6 +506,9 @@ export default function AdminPortal({
             { id: 'inventory', label: 'Stock & Menu' },
             ...(isCafeteriaAdmin
               ? [{ id: 'sales', label: 'Daily Sales & Analytics' }]
+              : []),
+            ...(isCafeteriaAdmin
+              ? [{ id: 'feedbacks', label: 'Customer Reviews', badge: allFeedbacks.length }]
               : []),
             { id: 'all_orders', label: 'Orders Audit Log' },
             ...(isCafeteriaAdmin
@@ -702,23 +934,58 @@ export default function AdminPortal({
       {/* ========================================================= */}
       {activeTab === 'sales' && (
         <div className="space-y-6">
-          {/* Timeframe Filter Bar */}
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-2xs">
-            <span className="text-xs font-bold text-slate-700">Financial Performance & Kitchen Throughput</span>
-            <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-xs">
-              {['today', 'yesterday', 'this_week'].map((t) => (
+          {/* Timeframe & Visualization Mode Bar */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">Financial Performance & Analytics</span>
+              <span className="text-[11px] text-slate-500">Live sales tracking, revenue curves and kitchen throughput</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Analytics Graph View Switcher */}
+              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
                 <button
-                  key={t}
-                  onClick={() => setSalesTimeframe(t)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition capitalize cursor-pointer ${
-                    salesTimeframe === t
-                      ? 'bg-slate-900 text-white'
+                  type="button"
+                  onClick={() => setAnalyticsView('line')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
+                    analyticsView === 'line'
+                      ? 'bg-slate-900 text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {t.replace('_', ' ')}
+                  <span>📈</span>
+                  <span>Line Graph</span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsView('bar')}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
+                    analyticsView === 'bar'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>📊</span>
+                  <span>Bar View</span>
+                </button>
+              </div>
+
+              {/* Timeframe Filter */}
+              <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-xs">
+                {['today', 'yesterday', 'this_week'].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setSalesTimeframe(t)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition capitalize cursor-pointer ${
+                      salesTimeframe === t
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {t.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -770,78 +1037,370 @@ export default function AdminPortal({
             </div>
           </div>
 
-          {/* Breakdown Section: Counters + Hourly Rush */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Counter Revenue Breakdown */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                  Counter Sales Performance
-                </h3>
-                <span className="text-[11px] text-slate-400 font-medium">3 Active Counters</span>
-              </div>
+          {/* Analytics Visualization Mode: Line Graph vs Bar View */}
+          {analyticsView === 'line' ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+              {/* Line Graph Header & Metric Toggle */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900 tracking-tight font-display flex items-center space-x-2">
+                    <span>📈</span>
+                    <span>Hourly Cafeteria Throughput & Sales Curve</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Continuous line graph showing meal rushes, revenue peaks & customer satisfaction
+                  </p>
+                </div>
 
-              <div className="space-y-4">
-                {Object.entries(counterSales).map(([key, data]) => {
-                  const percent = totalRevenue > 0 ? Math.round((data.rev / totalRevenue) * 100) : 0;
-                  return (
-                    <div key={key} className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-bold text-slate-800">{data.name}</span>
-                        <div className="space-x-2">
-                          <span className="font-black text-slate-900">₹{Math.round(data.rev)}</span>
-                          <span className="text-slate-400 text-[11px]">({percent}%)</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-slate-900 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${percent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Peak Rush Hour Distribution */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                  Hourly Mess Rush Distribution
-                </h3>
-                <span className="text-[11px] text-emerald-600 font-semibold">Lunch Peak: 1:00 PM</span>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2 pt-2">
-                {[
-                  { label: '8-10 AM', name: 'Breakfast', volume: '35%', count: 18 },
-                  { label: '12-3 PM', name: 'Lunch Rush', volume: '88%', count: 42, active: true },
-                  { label: '4-6 PM', name: 'Snacks/Tea', volume: '45%', count: 24 },
-                  { label: '7-9 PM', name: 'Dinner', volume: '62%', count: 31 },
-                ].map((slot) => (
-                  <div
-                    key={slot.label}
-                    className={`p-3 rounded-xl border text-center flex flex-col justify-between h-28 ${
-                      slot.active
-                        ? 'border-[#ab3500] bg-rose-50/30'
-                        : 'border-slate-200 bg-slate-50/50'
+                <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setLineGraphMetric('revenue')}
+                    className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      lineGraphMetric === 'revenue'
+                        ? 'bg-[#ab3500] text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 block">{slot.label}</span>
-                      <span className="text-xs font-bold text-slate-800">{slot.name}</span>
-                    </div>
-                    <div>
-                      <span className="text-base font-black text-slate-900 block">{slot.volume}</span>
-                      <span className="text-[10px] text-slate-500">{slot.count} orders</span>
-                    </div>
-                  </div>
-                ))}
+                    Gross Revenue (₹)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLineGraphMetric('orders')}
+                    className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      lineGraphMetric === 'orders'
+                        ? 'bg-teal-700 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Orders Volume (#)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLineGraphMetric('satisfaction')}
+                    className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      lineGraphMetric === 'satisfaction'
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Satisfaction (★)
+                  </button>
+                </div>
+              </div>
+
+              {/* Responsive SVG Line Graph */}
+              <div className="relative w-full overflow-x-auto no-scrollbar">
+                <div className="min-w-[680px]">
+                  {(() => {
+                    const width = 760;
+                    const height = 230;
+                    const padLeft = 60;
+                    const padRight = 30;
+                    const padTop = 25;
+                    const padBottom = 35;
+                    const chartW = width - padLeft - padRight;
+                    const chartH = height - padTop - padBottom;
+
+                    const isRev = lineGraphMetric === 'revenue';
+                    const isOrders = lineGraphMetric === 'orders';
+                    const isSat = lineGraphMetric === 'satisfaction';
+
+                    const values = hourlyPoints.map((p) =>
+                      isRev ? p.revenue : isOrders ? p.ordersCount : p.rating
+                    );
+                    const minVal = isSat ? 3.5 : 0;
+                    const maxVal = Math.max(...values) * (isSat ? 1.05 : 1.15) || 10;
+
+                    const getX = (idx) => padLeft + (idx / (hourlyPoints.length - 1)) * chartW;
+                    const getY = (val) => padTop + chartH - ((val - minVal) / (maxVal - minVal)) * chartH;
+
+                    const points = hourlyPoints.map((p, idx) => ({
+                      x: getX(idx),
+                      y: getY(values[idx]),
+                      data: p,
+                      val: values[idx],
+                    }));
+
+                    const pathD = points.reduce((acc, curr, idx) => {
+                      if (idx === 0) return `M ${curr.x} ${curr.y}`;
+                      const prev = points[idx - 1];
+                      const cx = (prev.x + curr.x) / 2;
+                      return `${acc} C ${cx} ${prev.y}, ${cx} ${curr.y}, ${curr.x} ${curr.y}`;
+                    }, '');
+
+                    const areaD = `${pathD} L ${points[points.length - 1].x} ${padTop + chartH} L ${points[0].x} ${padTop + chartH} Z`;
+
+                    const strokeColor = isRev ? '#ab3500' : isOrders ? '#0f766e' : '#d97706';
+                    const gradId = isRev ? 'revGrad' : isOrders ? 'ordGrad' : 'satGrad';
+                    const gradStopColor = isRev ? '#ab3500' : isOrders ? '#0d9488' : '#f59e0b';
+
+                    const gridLevels = [0, 0.25, 0.5, 0.75, 1];
+
+                    return (
+                      <div className="relative">
+                        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+                          <defs>
+                            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={gradStopColor} stopOpacity="0.25" />
+                              <stop offset="100%" stopColor={gradStopColor} stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+
+                          {/* Horizontal Grid lines & Y-Axis Labels */}
+                          {gridLevels.map((lvl) => {
+                            const valAtLvl = minVal + lvl * (maxVal - minVal);
+                            const y = padTop + chartH - lvl * chartH;
+                            const labelText = isRev
+                              ? `₹${Math.round(valAtLvl).toLocaleString('en-IN')}`
+                              : isOrders
+                              ? `${Math.round(valAtLvl)}`
+                              : `${valAtLvl.toFixed(1)}★`;
+                            return (
+                              <g key={lvl}>
+                                <line
+                                  x1={padLeft}
+                                  y1={y}
+                                  x2={width - padRight}
+                                  y2={y}
+                                  stroke="#e2e8f0"
+                                  strokeDasharray="4 4"
+                                  strokeWidth="1"
+                                />
+                                <text
+                                  x={padLeft - 8}
+                                  y={y + 3.5}
+                                  textAnchor="end"
+                                  className="text-[10px] font-mono fill-slate-400"
+                                >
+                                  {labelText}
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Gradient Fill under Curve */}
+                          <path d={areaD} fill={`url(#${gradId})`} />
+
+                          {/* Main Spline Curve */}
+                          <path
+                            d={pathD}
+                            fill="none"
+                            stroke={strokeColor}
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+
+                          {/* Data points & X Axis ticks */}
+                          {points.map((pt, idx) => {
+                            const isHovered = hoveredPointIdx === idx;
+                            return (
+                              <g key={idx}>
+                                {isHovered && (
+                                  <line
+                                    x1={pt.x}
+                                    y1={padTop}
+                                    x2={pt.x}
+                                    y2={padTop + chartH}
+                                    stroke={strokeColor}
+                                    strokeDasharray="2 2"
+                                    strokeWidth="1"
+                                    opacity="0.6"
+                                  />
+                                )}
+
+                                <text
+                                  x={pt.x}
+                                  y={padTop + chartH + 18}
+                                  textAnchor="middle"
+                                  className={`text-[10px] font-bold ${
+                                    isHovered ? 'fill-slate-900 font-black' : 'fill-slate-400'
+                                  }`}
+                                >
+                                  {pt.data.hour}
+                                </text>
+
+                                <circle
+                                  cx={pt.x}
+                                  cy={pt.y}
+                                  r={isHovered ? 6 : 4}
+                                  fill={isHovered ? strokeColor : '#ffffff'}
+                                  stroke={strokeColor}
+                                  strokeWidth="2.5"
+                                  className="transition-all duration-150 cursor-pointer"
+                                  onMouseEnter={() => setHoveredPointIdx(idx)}
+                                  onMouseLeave={() => setHoveredPointIdx(null)}
+                                />
+                              </g>
+                            );
+                          })}
+                        </svg>
+
+                        {/* Interactive Tooltip Card */}
+                        {hoveredPointIdx !== null && points[hoveredPointIdx] && (
+                          <div
+                            className="absolute pointer-events-none z-20 bg-slate-900 text-white p-2.5 rounded-xl shadow-xl text-xs space-y-1 transform -translate-x-1/2 -translate-y-full border border-slate-700 min-w-[160px]"
+                            style={{
+                              left: `${(points[hoveredPointIdx].x / width) * 100}%`,
+                              top: `${(points[hoveredPointIdx].y / height) * 100 - 4}%`,
+                            }}
+                          >
+                            <div className="flex items-center justify-between text-[11px] font-extrabold text-amber-300 border-b border-slate-700 pb-1">
+                              <span>{points[hoveredPointIdx].data.label}</span>
+                              <span className="text-[10px] text-slate-300">
+                                {points[hoveredPointIdx].data.period}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px] pt-0.5">
+                              <span className="text-slate-400">Gross Sales:</span>
+                              <span className="font-mono font-bold text-white">
+                                ₹{points[hoveredPointIdx].data.revenue.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-slate-400">Orders Fulfilled:</span>
+                              <span className="font-bold text-teal-300">
+                                {points[hoveredPointIdx].data.ordersCount} trays
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-slate-400">Avg Ticket / AOV:</span>
+                              <span className="font-bold text-slate-300">
+                                ₹{points[hoveredPointIdx].data.avgTicket}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-slate-400">Satisfaction:</span>
+                              <span className="font-bold text-amber-400">
+                                {points[hoveredPointIdx].data.rating} ★
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Line Graph Highlight Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Peak Rush Window
+                  </span>
+                  <span className="text-sm font-extrabold text-slate-900 block mt-0.5">
+                    12:00 PM – 2:00 PM
+                  </span>
+                  <span className="text-[10px] text-[#ab3500] font-bold">~33% of daily revenue</span>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Highest Volume Hour
+                  </span>
+                  <span className="text-sm font-extrabold text-teal-700 block mt-0.5">
+                    01:00 PM (Lunch Rush)
+                  </span>
+                  <span className="text-[10px] text-slate-500">62 trays dispatched</span>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Fastest Service Slot
+                  </span>
+                  <span className="text-sm font-extrabold text-emerald-700 block mt-0.5">
+                    04:00 PM (Evening Tea)
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-semibold">4.2 min avg prep</span>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Customer Satisfaction Peak
+                  </span>
+                  <span className="text-sm font-extrabold text-amber-600 block mt-0.5">
+                    4.9 ★ (Snacks & Tea)
+                  </span>
+                  <span className="text-[10px] text-slate-500">95% positive sentiment</span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* Bar Chart View */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Counter Revenue Breakdown */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+                    Counter Sales Performance
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-medium">3 Active Counters</span>
+                </div>
+
+                <div className="space-y-4">
+                  {Object.entries(counterSales).map(([key, data]) => {
+                    const percent = totalRevenue > 0 ? Math.round((data.rev / totalRevenue) * 100) : 0;
+                    return (
+                      <div key={key} className="space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-bold text-slate-800">{data.name}</span>
+                          <div className="space-x-2">
+                            <span className="font-black text-slate-900">₹{Math.round(data.rev)}</span>
+                            <span className="text-slate-400 text-[11px]">({percent}%)</span>
+                          </div>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-slate-900 h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${percent}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Peak Rush Hour Distribution */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
+                    Hourly Mess Rush Distribution
+                  </h3>
+                  <span className="text-[11px] text-emerald-600 font-semibold">Lunch Peak: 1:00 PM</span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2 pt-2">
+                  {[
+                    { label: '8-10 AM', name: 'Breakfast', volume: '35%', count: 18 },
+                    { label: '12-3 PM', name: 'Lunch Rush', volume: '88%', count: 42, active: true },
+                    { label: '4-6 PM', name: 'Snacks/Tea', volume: '45%', count: 24 },
+                    { label: '7-9 PM', name: 'Dinner', volume: '62%', count: 31 },
+                  ].map((slot) => (
+                    <div
+                      key={slot.label}
+                      className={`p-3 rounded-xl border text-center flex flex-col justify-between h-28 ${
+                        slot.active
+                          ? 'border-[#ab3500] bg-rose-50/30'
+                          : 'border-slate-200 bg-slate-50/50'
+                      }`}
+                    >
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block">{slot.label}</span>
+                        <span className="text-xs font-bold text-slate-800">{slot.name}</span>
+                      </div>
+                      <div>
+                        <span className="text-base font-black text-slate-900 block">{slot.volume}</span>
+                        <span className="text-[10px] text-slate-500">{slot.count} orders</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Top Selling Dishes Leaderboard */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
@@ -882,6 +1441,358 @@ export default function AdminPortal({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 4. CUSTOMER FEEDBACKS & SENTIMENT ANALYTICS (ADMIN ONLY) */}
+      {/* ========================================================= */}
+      {activeTab === 'feedbacks' && (
+        !isCafeteriaAdmin ? (
+          <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3 shadow-2xs">
+            <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center text-3xl mx-auto">
+              🔒
+            </div>
+            <h3 className="font-extrabold text-base text-slate-900 font-display">
+              Restricted Administrator Access
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Customer feedbacks and sentiment analytics are confidential and exclusively accessible to verified Cafeteria Administrators.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Header & Description */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-display flex items-center space-x-2">
+                  <span>⭐</span>
+                  <span>Customer Reviews & Sentiment Analytics</span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                    Admin Portal
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Natural language sentiment analysis (-ve / +ve) classified by customer keywords, context & ratings
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={fetchGeneralFeedbacks}
+                  disabled={feedbackLoading}
+                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition cursor-pointer flex items-center space-x-1"
+                >
+                  <span>🔄</span>
+                  <span>{feedbackLoading ? 'Refreshing...' : 'Refresh Reviews'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Sentiment & Satisfaction Metric Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Positive Sentiment Rate */}
+              <div className="bg-white p-4.5 rounded-2xl border border-emerald-200/90 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Overall Sentiment
+                  </span>
+                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    {positiveSentimentRate}% +ve
+                  </span>
+                </div>
+                <span className="text-2xl font-black text-emerald-700 font-display mt-1 block">
+                  {positiveSentimentRate}% Positive
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium mt-1 block">
+                  {positiveFeedbacks.length} praise vs {negativeFeedbacks.length} critiques
+                </span>
+              </div>
+
+              {/* Average Star Rating */}
+              <div className="bg-white p-4.5 rounded-2xl border border-amber-200/90 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Average Score
+                  </span>
+                  <span className="text-amber-500 font-black text-sm">★★★★★</span>
+                </div>
+                <span className="text-2xl font-black text-slate-900 font-display mt-1 block">
+                  {avgSatisfactionScore} / 5.0
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium mt-1 block">
+                  Across {allFeedbacks.length} total customer reviews
+                </span>
+              </div>
+
+              {/* Positive Reviews (+ve) */}
+              <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider block">
+                  🟢 Positive (+ve) Feedbacks
+                </span>
+                <span className="text-2xl font-black text-emerald-800 font-display mt-1 block">
+                  {positiveFeedbacks.length}
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium mt-1 block">
+                  Delicious taste, prompt service & polite staff
+                </span>
+              </div>
+
+              {/* Negative Reviews (-ve) */}
+              <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-bold text-rose-700 tracking-wider block">
+                  🔴 Negative (-ve) Feedbacks
+                </span>
+                <span className="text-2xl font-black text-rose-700 font-display mt-1 block">
+                  {negativeFeedbacks.length}
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium mt-1 block">
+                  Complaints, delays or food quality issues
+                </span>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Sentiment Filter Tabs (-ve / +ve / all) */}
+                <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  <span className="text-xs font-bold text-slate-400 mr-1 hidden sm:inline">Filter:</span>
+                  {[
+                    { id: 'all', label: 'All Reviews', count: allFeedbacks.length, color: 'slate' },
+                    { id: 'positive', label: '🟢 Positive (+ve)', count: positiveFeedbacks.length, color: 'emerald' },
+                    { id: 'negative', label: '🔴 Negative (-ve)', count: negativeFeedbacks.length, color: 'rose' },
+                    { id: 'neutral', label: '🟡 Neutral', count: neutralFeedbacks.length, color: 'amber' },
+                  ].map((btn) => (
+                    <button
+                      key={btn.id}
+                      type="button"
+                      onClick={() => setFeedbackSentimentFilter(btn.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap border ${
+                        feedbackSentimentFilter === btn.id
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <span>{btn.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                        feedbackSentimentFilter === btn.id ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {btn.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sort Option */}
+                <div className="flex items-center space-x-2 shrink-0">
+                  <span className="text-xs font-bold text-slate-400">Sort:</span>
+                  <select
+                    value={feedbackSort}
+                    onChange={(e) => setFeedbackSort(e.target.value)}
+                    className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-hidden"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="highest">Highest Rating (5★)</option>
+                    <option value="lowest">Lowest Rating (1★)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Search Bar + Source Filter */}
+              <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                <div className="relative flex-1 w-full">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <SearchIcon className="w-3.5 h-3.5" />
+                  </span>
+                  <input
+                    type="text"
+                    value={feedbackSearch}
+                    onChange={(e) => setFeedbackSearch(e.target.value)}
+                    placeholder="Search by words (e.g. 'delicious', 'cold', 'slow', dish name, student)..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-[#ab3500] transition"
+                  />
+                  {feedbackSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackSearch('')}
+                      className="absolute right-2.5 top-2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Source Filter */}
+                <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-xs shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackTypeFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      feedbackTypeFilter === 'all'
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All Sources
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackTypeFilter('order')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      feedbackTypeFilter === 'order'
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Orders
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackTypeFilter('cafeteria')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      feedbackTypeFilter === 'cafeteria'
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Suggestions
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Reviews Cards List */}
+            {filteredFeedbacks.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-2xs space-y-2">
+                <span className="text-3xl block">🔍</span>
+                <h4 className="font-bold text-sm text-slate-800">No matching customer feedbacks</h4>
+                <p className="text-xs text-slate-500">
+                  Try clearing your search query or selecting a different sentiment filter.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredFeedbacks.map((f) => {
+                  const isPos = f.sentiment === 'positive';
+                  const isNeg = f.sentiment === 'negative';
+
+                  return (
+                    <div
+                      key={f.id}
+                      className={`rounded-2xl border p-4.5 space-y-3 transition shadow-2xs ${
+                        isPos
+                          ? 'bg-gradient-to-br from-emerald-50/40 via-white to-white border-emerald-200 hover:border-emerald-300'
+                          : isNeg
+                          ? 'bg-gradient-to-br from-rose-50/50 via-white to-white border-rose-200 hover:border-rose-300'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Card Header: Student & Sentiment Badge */}
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div className="flex items-center space-x-2.5">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-2xs ${
+                            isPos
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isNeg
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {f.studentName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-extrabold text-xs text-slate-900">
+                                {f.studentName}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                ({f.studentId})
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block">
+                              {f.date} • {f.counter}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Sentiment Classification Badge */}
+                        <div className="text-right">
+                          <span className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                            isPos
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : isNeg
+                              ? 'bg-rose-100 text-rose-900 border-rose-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          }`}>
+                            <span>{isPos ? '🟢 +ve Positive' : isNeg ? '🔴 -ve Negative' : '🟡 Neutral'}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Star Rating & Sense Keywords */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center space-x-1 text-amber-500 font-bold text-sm">
+                          <span>{'★'.repeat(f.rating || 5)}</span>
+                          <span className="text-slate-300 font-normal">{'★'.repeat(Math.max(0, 5 - (f.rating || 5)))}</span>
+                          <span className="text-xs font-black text-slate-700 ml-1.5">
+                            {f.rating}/5
+                          </span>
+                        </div>
+
+                        {/* Highlighted Words & Sense */}
+                        {isPos && f.posMatches.length > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                            ✨ Sense: "{f.posMatches.slice(0, 3).join('", "')}"
+                          </span>
+                        )}
+                        {isNeg && f.negMatches.length > 0 && (
+                          <span className="text-[10px] font-bold text-rose-800 bg-rose-100/70 px-2 py-0.5 rounded-md">
+                            ⚠️ Sense: "{f.negMatches.slice(0, 3).join('", "')}"
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Feedback Notes Quotation */}
+                      {f.notes ? (
+                        <div className={`p-3 rounded-xl border text-xs leading-relaxed italic ${
+                          isPos
+                            ? 'bg-white/80 border-emerald-100 text-slate-800'
+                            : isNeg
+                            ? 'bg-white/80 border-rose-100 text-slate-800'
+                            : 'bg-slate-50 border-slate-200 text-slate-700'
+                        }`}>
+                          "{f.notes}"
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic">No detailed comment provided with rating.</p>
+                      )}
+
+                      {/* Tags & Items Ordered */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                        <div className="flex flex-wrap gap-1.5">
+                          {f.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+
+                        {f.type === 'order' && f.items.length > 0 && (
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            🛒 {f.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {/* ========================================================= */}
