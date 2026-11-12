@@ -10,6 +10,14 @@ const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
 const { spawn } = require('child_process');
 
+// Process Crash Protection (Keep server running 24/7)
+process.on('uncaughtException', (err) => {
+  console.error('[Process Error Caught]:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection Caught]:', reason);
+});
+
 // 1. Load Environment Configuration
 const rootEnvPath = path.join(__dirname, '.env');
 const serverEnvPath = path.join(__dirname, 'server', '.env');

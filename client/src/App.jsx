@@ -88,65 +88,87 @@ export default function App() {
   const [feedbackPopupOrder, setFeedbackPopupOrder] = useState(null);
   const prevOrderStatusesRef = useRef({});
 
-  // Database Auto-Detection & Fallback Protocol
+  // Database Auto-Detection & Resilient Auto-Reconnect Protocol
   useEffect(() => {
+    let isSubscribed = true;
+
+    async function syncDatabaseData() {
+      // Fetch Menu from PostgreSQL
+      try {
+        const menuRes = await fetch('/api/menu');
+        const menuData = await menuRes.json();
+        if (menuData && Array.isArray(menuData.items) && menuData.items.length > 0) {
+          setFoodItems(menuData.items);
+        }
+      } catch (_) {}
+
+      // Fetch Orders from PostgreSQL
+      try {
+        const ordersRes = await fetch('/api/orders');
+        const ordersData = await ordersRes.json();
+        if (ordersData && Array.isArray(ordersData.orders) && ordersData.orders.length > 0) {
+          ordersData.orders.forEach((o) => {
+            prevOrderStatusesRef.current[o.id] = o.status;
+          });
+          setOrders(ordersData.orders);
+        }
+      } catch (_) {}
+
+      // Fetch Wallet from PostgreSQL
+      try {
+        const walletRes = await fetch('/api/wallet');
+        const walletData = await walletRes.json();
+        if (walletData && walletData.balance !== undefined) {
+          setUser((prev) => ({
+            ...prev,
+            walletBalance: walletData.balance,
+            rewardPoints: walletData.rewardPoints || prev.rewardPoints,
+          }));
+          if (Array.isArray(walletData.transactions) && walletData.transactions.length > 0) {
+            setWalletTransactions(walletData.transactions);
+          }
+        }
+      } catch (_) {}
+    }
+
     async function checkDatabaseConnection() {
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
         if (data && data.dbConnected) {
-          setDbStatus({ checked: true, connected: true, database: data.database });
-          showToast('Connected to PostgreSQL Database');
-
-          // Fetch Menu from PostgreSQL
-          try {
-            const menuRes = await fetch('/api/menu');
-            const menuData = await menuRes.json();
-            if (menuData && Array.isArray(menuData.items) && menuData.items.length > 0) {
-              setFoodItems(menuData.items);
-            }
-          } catch (_) {}
-
-          // Fetch Orders from PostgreSQL
-          try {
-            const ordersRes = await fetch('/api/orders');
-            const ordersData = await ordersRes.json();
-            if (ordersData && Array.isArray(ordersData.orders) && ordersData.orders.length > 0) {
-              ordersData.orders.forEach((o) => {
-                prevOrderStatusesRef.current[o.id] = o.status;
-              });
-              setOrders(ordersData.orders);
-            }
-          } catch (_) {}
-
-          // Fetch Wallet from PostgreSQL
-          try {
-            const walletRes = await fetch('/api/wallet');
-            const walletData = await walletRes.json();
-            if (walletData && walletData.balance !== undefined) {
-              setUser((prev) => ({
-                ...prev,
-                walletBalance: walletData.balance,
-                rewardPoints: walletData.rewardPoints || prev.rewardPoints,
-              }));
-              if (Array.isArray(walletData.transactions) && walletData.transactions.length > 0) {
-                setWalletTransactions(walletData.transactions);
-              }
-            }
-          } catch (_) {}
-
-          return;
+          if (!dbStatus.connected) {
+            setDbStatus({ checked: true, connected: true, database: data.database });
+            showToast('Connected to PostgreSQL Database');
+            await syncDatabaseData();
+          }
+          return true;
         }
       } catch (err) {
         // API offline or DB not reachable
       }
 
-      // Fallback: Database not found -> Use localStorage & mockData
-      setDbStatus({ checked: true, connected: false, database: null });
+      if (dbStatus.connected) {
+        setDbStatus({ checked: true, connected: false, database: null });
+      } else if (!dbStatus.checked) {
+        setDbStatus({ checked: true, connected: false, database: null });
+      }
+      return false;
     }
 
     checkDatabaseConnection();
-  }, []);
+
+    // Heartbeat every 4s to ensure continuous connection & auto-reconnect if server restarts
+    const interval = setInterval(() => {
+      if (isSubscribed) {
+        checkDatabaseConnection();
+      }
+    }, 4000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [dbStatus.connected]);
 
   // Live polling for order status updates from Kitchen Staff KDS
   useEffect(() => {
