@@ -81,8 +81,32 @@ async function checkDatabase() {
   try {
     const client = await pool.connect();
     try {
-      const res = await client.query("SELECT to_regclass('public.menu_items') as tbl_exists;");
-      const hasTable = Boolean(res.rows[0] && res.rows[0].tbl_exists);
+      let res = await client.query("SELECT to_regclass('public.menu_items') as tbl_exists;");
+      let hasTable = Boolean(res.rows[0] && res.rows[0].tbl_exists);
+
+      // If fresh cloud database connected (e.g. Render/Supabase/Neon), auto-create schema & seed
+      if (!hasTable) {
+        console.log('[PostgreSQL] Initializing tables from schema_postgres.sql...');
+        const schemaPath = path.join(__dirname, 'database', 'schema_postgres.sql');
+        const seedPath = path.join(__dirname, 'database', 'seed_postgres.sql');
+        if (fs.existsSync(schemaPath)) {
+          const sql = fs.readFileSync(schemaPath, 'utf8');
+          await client.query(sql);
+          console.log('[PostgreSQL] Schema successfully initialized!');
+        }
+        if (fs.existsSync(seedPath)) {
+          try {
+            const seedSql = fs.readFileSync(seedPath, 'utf8');
+            await client.query(seedSql);
+            console.log('[PostgreSQL] Seed data inserted successfully!');
+          } catch (seedErr) {
+            console.log('[PostgreSQL] Seed notice:', seedErr.message);
+          }
+        }
+        res = await client.query("SELECT to_regclass('public.menu_items') as tbl_exists;");
+        hasTable = Boolean(res.rows[0] && res.rows[0].tbl_exists);
+      }
+
       if (hasTable) {
         try {
           await client.query(`
