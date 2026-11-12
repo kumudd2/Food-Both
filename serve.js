@@ -115,6 +115,15 @@ async function checkDatabase() {
             ADD COLUMN IF NOT EXISTS feedback_notes TEXT,
             ADD COLUMN IF NOT EXISTS feedback_tags TEXT,
             ADD COLUMN IF NOT EXISTS feedback_at TIMESTAMPTZ;
+
+            CREATE TABLE IF NOT EXISTS cafeteria_feedback (
+              id SERIAL PRIMARY KEY,
+              student_name VARCHAR(120),
+              rating INT,
+              category VARCHAR(80),
+              feedback_notes TEXT,
+              created_at TIMESTAMPTZ DEFAULT NOW()
+            );
           `);
         } catch (_) {}
       }
@@ -1115,6 +1124,34 @@ const server = http.createServer(async (req, res) => {
           feedbackTags: tags,
           feedbackAt: new Date().toISOString(),
         },
+      });
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
+
+  // POST General Cafeteria Feedback & Suggestions from Home Screen
+  if (pathname === '/api/feedback' && req.method === 'POST') {
+    try {
+      const data = await parseJson(req);
+      const studentName = (data.studentName || 'Student').trim();
+      const rating = Number(data.rating) || 5;
+      const category = (data.category || 'General Dining').trim();
+      const notes = (data.notes || '').trim();
+
+      const dbInfo = await checkDatabase();
+      if (dbInfo.dbConnected) {
+        await pool.query(
+          `INSERT INTO cafeteria_feedback (student_name, rating, category, feedback_notes)
+           VALUES ($1, $2, $3, $4);`,
+          [studentName, rating, category, notes]
+        );
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        message: 'Thank you for your valuable feedback! The food court team will review it.',
+        feedback: { studentName, rating, category, notes, createdAt: new Date().toISOString() },
       });
     } catch (err) {
       return sendJson(res, 500, { error: err.message });

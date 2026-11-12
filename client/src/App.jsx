@@ -86,7 +86,27 @@ export default function App() {
 
   // Auto-popup feedback modal when kitchen confirms pickup
   const [feedbackPopupOrder, setFeedbackPopupOrder] = useState(null);
+  const [dismissedFeedbackIds, setDismissedFeedbackIds] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('fb_dismissed_feedback');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const prevOrderStatusesRef = useRef({});
+
+  const markFeedbackDismissed = (orderId) => {
+    if (!orderId) return;
+    setDismissedFeedbackIds((prev) => {
+      if (prev.includes(orderId)) return prev;
+      const updated = [...prev, orderId];
+      try {
+        sessionStorage.setItem('fb_dismissed_feedback', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+  };
 
   // Database Auto-Detection & Resilient Auto-Reconnect Protocol
   useEffect(() => {
@@ -107,6 +127,14 @@ export default function App() {
         const ordersRes = await fetch('/api/orders');
         const ordersData = await ordersRes.json();
         if (ordersData && Array.isArray(ordersData.orders) && ordersData.orders.length > 0) {
+          if (role === 'student') {
+            const unratedRecent = ordersData.orders.find(
+              (o) => o.status === 'collected' && !o.rating && !dismissedFeedbackIds.includes(o.id)
+            );
+            if (unratedRecent) {
+              setFeedbackPopupOrder((curr) => curr || unratedRecent);
+            }
+          }
           ordersData.orders.forEach((o) => {
             prevOrderStatusesRef.current[o.id] = o.status;
           });
@@ -186,12 +214,25 @@ export default function App() {
             const newlyCollected = newOrders.find(
               (ord) =>
                 ord.status === 'collected' &&
+                !ord.rating &&
+                !dismissedFeedbackIds.includes(ord.id) &&
                 prevStatuses[ord.id] &&
-                prevStatuses[ord.id] !== 'collected' &&
-                !ord.rating
+                prevStatuses[ord.id] !== 'collected'
             );
-            if (newlyCollected) {
-              setFeedbackPopupOrder((current) => current || newlyCollected);
+
+            const targetOrder = newlyCollected || (
+              !feedbackPopupOrder
+                ? newOrders.find(
+                    (ord) =>
+                      ord.status === 'collected' &&
+                      !ord.rating &&
+                      !dismissedFeedbackIds.includes(ord.id)
+                  )
+                : null
+            );
+
+            if (targetOrder) {
+              setFeedbackPopupOrder((current) => current || targetOrder);
             }
           }
 
@@ -203,9 +244,9 @@ export default function App() {
           setOrders(newOrders);
         }
       } catch (_) {}
-    }, 3500);
+    }, 2500);
     return () => clearInterval(interval);
-  }, [dbStatus.connected, role]);
+  }, [dbStatus.connected, role, dismissedFeedbackIds, feedbackPopupOrder]);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -423,6 +464,8 @@ export default function App() {
     const { rating, notes, tags } = feedbackData;
     const nowIso = new Date().toISOString();
 
+    markFeedbackDismissed(orderId);
+
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.id === orderId) {
@@ -446,6 +489,26 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rating, notes, tags }),
     }).catch((err) => console.log('Feedback sync notice:', err.message));
+
+    setFeedbackPopupOrder(null);
+  };
+
+  // Submit General Cafeteria Feedback & Suggestions
+  const handleGeneralFeedback = async (feedbackData) => {
+    const payload = {
+      studentName: user.name || 'Student',
+      rating: feedbackData.rating,
+      category: feedbackData.category,
+      notes: feedbackData.notes,
+    };
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (_) {}
+    showToast(`Thank you! Your feedback on "${feedbackData.category}" was submitted.`);
   };
 
   // Recharge Wallet
@@ -598,6 +661,11 @@ export default function App() {
                 <MenuScreen
                   foodItems={foodItems}
                   cartItems={cartItems}
+                  orders={orders}
+                  unratedOrder={orders.find((ord) => ord.status === 'collected' && !ord.rating)}
+                  onOpenFeedbackModal={(ord) => setFeedbackPopupOrder(ord)}
+                  onSubmitGeneralFeedback={handleGeneralFeedback}
+                  user={user}
                   onAddToCart={handleAddToCart}
                   onIncreaseQty={handleIncreaseQty}
                   onDecreaseQty={handleDecreaseQty}
@@ -727,7 +795,10 @@ export default function App() {
               </div>
               <button
                 type="button"
-                onClick={() => setFeedbackPopupOrder(null)}
+                onClick={() => {
+                  markFeedbackDismissed(feedbackPopupOrder.id);
+                  setFeedbackPopupOrder(null);
+                }}
                 aria-label="Close"
                 className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition cursor-pointer text-sm font-bold"
               >
@@ -739,7 +810,10 @@ export default function App() {
                 order={feedbackPopupOrder}
                 onSubmitFeedback={handleSubmitFeedback}
                 isModal={true}
-                onCloseModal={() => setFeedbackPopupOrder(null)}
+                onCloseModal={() => {
+                  markFeedbackDismissed(feedbackPopupOrder.id);
+                  setFeedbackPopupOrder(null);
+                }}
               />
             </div>
           </div>
