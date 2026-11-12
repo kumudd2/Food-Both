@@ -43,6 +43,7 @@ export default function AdminPortal({
   const [newStaffPhone, setNewStaffPhone] = React.useState('');
   const [newStaffPassword, setNewStaffPassword] = React.useState('');
   const [newStaffCounter, setNewStaffCounter] = React.useState('Counter 1 (Fast Food)');
+  const [newStaffRole, setNewStaffRole] = React.useState('staff');
   const [staffSubmitting, setStaffSubmitting] = React.useState(false);
   const [staffError, setStaffError] = React.useState('');
   const [staffSuccess, setStaffSuccess] = React.useState('');
@@ -71,11 +72,6 @@ export default function AdminPortal({
     setStaffError('');
     setStaffSuccess('');
 
-    if (staffList.length >= 2) {
-      setStaffError('Maximum limit of 2 staff accounts reached. Delete an existing staff member first.');
-      return;
-    }
-
     if (!newStaffName.trim()) {
       setStaffError('Please enter the staff member full name.');
       return;
@@ -102,13 +98,14 @@ export default function AdminPortal({
           phone: newStaffPhone.trim(),
           password: newStaffPassword,
           counter: newStaffCounter,
+          role: newStaffRole,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setStaffError(data.error || 'Failed to create staff account.');
       } else {
-        setStaffSuccess(`Staff ID created for ${newStaffName}! Login credentials are active.`);
+        setStaffSuccess(`${newStaffRole === 'admin' ? 'Admin' : 'Staff'} ID created for ${newStaffName}! Login credentials are active.`);
         setNewStaffName('');
         setNewStaffEmail('');
         setNewStaffPhone('');
@@ -281,7 +278,7 @@ export default function AdminPortal({
             { id: 'sales', label: 'Daily Sales & Analytics' },
             { id: 'all_orders', label: 'Orders Audit Log' },
             ...(isCafeteriaAdmin
-              ? [{ id: 'staff', label: 'Staff Accounts', badge: `${staffList.length}/2` }]
+              ? [{ id: 'staff', label: 'Staff & Admin Accounts', badge: staffList.length }]
               : []),
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -1034,7 +1031,7 @@ export default function AdminPortal({
       )}
 
             {/* ========================================================= */}
-      {/* 5. KITCHEN STAFF ACCOUNTS MANAGEMENT (ADMIN ONLY)        */}
+      {/* 5. STAFF & ADMIN ACCOUNTS MANAGEMENT (ADMIN ONLY)        */}
       {/* ========================================================= */}
       {activeTab === 'staff' && isCafeteriaAdmin && (
         <div className="space-y-6">
@@ -1044,145 +1041,158 @@ export default function AdminPortal({
               <div className="flex items-center space-x-2.5">
                 <span className="text-2xl">👨‍🍳</span>
                 <h2 className="text-lg sm:text-xl font-black tracking-tight font-display text-white">
-                  Kitchen Staff ID Management
+                  Staff & Admin Account Management
                 </h2>
                 <span className="text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
                   Admin Control
                 </span>
               </div>
               <p className="text-xs text-slate-300 max-w-xl">
-                Create and delete login accounts for your kitchen staff. For strict counter security and orderly meal preparation, a maximum limit of <strong>2 kitchen staff members</strong> is allowed.
+                Create and manage login accounts for your kitchen staff and cafeteria administrators. You can create as many staff and admin accounts as needed.
               </p>
             </div>
 
             <div className="flex items-center space-x-3 shrink-0">
               <div className="bg-slate-800/90 border border-slate-700 rounded-2xl px-4 py-2.5 text-center">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                  Staff Quota
+                  Total Active Accounts
                 </span>
                 <span className="text-lg font-black text-amber-300 font-mono">
-                  {staffList.length} / 2
+                  {staffList.length}
                 </span>
               </div>
-              {staffList.length >= 2 ? (
-                <div className="bg-rose-950/60 border border-rose-800 text-rose-300 px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center space-x-1.5">
-                  <span>⛔</span>
-                  <span>Limit Reached (2/2)</span>
-                </div>
-              ) : (
-                <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-300 px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center space-x-1.5">
-                  <span>🟢</span>
-                  <span>{2 - staffList.length} Slot Available</span>
-                </div>
-              )}
+              <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-300 px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center space-x-1.5">
+                <span>🟢</span>
+                <span>Unlimited Creation Enabled</span>
+              </div>
             </div>
           </div>
 
           {/* Form & List Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left: Create Staff Form (5 cols) */}
+            {/* Left: Create Staff/Admin Form (5 cols) */}
             <div className="lg:col-span-5 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-2xs">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <div>
                   <h3 className="font-black text-slate-900 text-sm font-display">
-                    Create New Staff Login ID
+                    Create New Staff / Admin ID
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Credentials can be used to log in on the staff portal
+                    Credentials can be used to log in on the staff & admin portal
                   </p>
                 </div>
-                <span className="text-xs font-black text-slate-400 font-mono">
-                  {staffList.length >= 2 ? '0 left' : `${2 - staffList.length} left`}
-                </span>
               </div>
 
-              {staffList.length >= 2 ? (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg">⚠️</span>
-                    <h4 className="font-black text-xs">Maximum 2 Staff Limit Reached</h4>
+              <form onSubmit={handleCreateStaff} className="space-y-3.5">
+                {staffError && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in">
+                    <span>⚠️</span>
+                    <span>{staffError}</span>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    You currently have 2 active kitchen staff members. To add a new staff person, you must first delete one of the existing staff accounts on the right.
-                  </p>
+                )}
+
+                {staffSuccess && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in">
+                    <span>✅</span>
+                    <span>{staffSuccess}</span>
+                  </div>
+                )}
+
+                {/* Role Selector */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                    Account Role
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewStaffRole('staff')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 border cursor-pointer ${
+                        newStaffRole === 'staff'
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>👨‍🍳</span>
+                      <span>Kitchen Staff</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewStaffRole('admin')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 border cursor-pointer ${
+                        newStaffRole === 'admin'
+                          ? 'bg-slate-900 text-white border-slate-950 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>🛡️</span>
+                      <span>Admin</span>
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <form onSubmit={handleCreateStaff} className="space-y-3.5">
-                  {staffError && (
-                    <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in">
-                      <span>⚠️</span>
-                      <span>{staffError}</span>
-                    </div>
-                  )}
 
-                  {staffSuccess && (
-                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center space-x-2 animate-fade-in">
-                      <span>✅</span>
-                      <span>{staffSuccess}</span>
-                    </div>
-                  )}
+                {/* Member Name */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newStaffName}
+                    onChange={(e) => setNewStaffName(e.target.value)}
+                    placeholder={newStaffRole === 'admin' ? 'e.g. Manager Gupta' : 'e.g. Chef Suresh Kumar'}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                  />
+                </div>
 
-                  {/* Staff Name */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Staff Member Name
-                    </label>
-                    <input
-                      type="text"
-                      value={newStaffName}
-                      onChange={(e) => setNewStaffName(e.target.value)}
-                      placeholder="e.g. Chef Suresh Kumar"
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
-                    />
-                  </div>
+                {/* Email / Login ID */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                    Login Email / Username
+                  </label>
+                  <input
+                    type="text"
+                    value={newStaffEmail}
+                    onChange={(e) => setNewStaffEmail(e.target.value)}
+                    placeholder={newStaffRole === 'admin' ? 'e.g. admin.blocka@college.edu' : 'e.g. suresh.counter2@college.edu'}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                  />
+                </div>
 
-                  {/* Email / Login ID */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Staff Login Email / ID
-                    </label>
-                    <input
-                      type="text"
-                      value={newStaffEmail}
-                      onChange={(e) => setNewStaffEmail(e.target.value)}
-                      placeholder="e.g. suresh.counter2@college.edu or suresh2"
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
-                    />
-                  </div>
+                {/* Mobile Number */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                    Mobile Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={newStaffPhone}
+                    onChange={(e) => setNewStaffPhone(e.target.value)}
+                    placeholder="e.g. +91 98765 12345"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                  />
+                </div>
 
-                  {/* Phone Number */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Mobile Number (Optional)
-                    </label>
-                    <input
-                      type="tel"
-                      value={newStaffPhone}
-                      onChange={(e) => setNewStaffPhone(e.target.value)}
-                      placeholder="e.g. +91 98765 12345"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
-                    />
-                  </div>
+                {/* Initial Password */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                    Initial Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newStaffPassword}
+                    onChange={(e) => setNewStaffPassword(e.target.value)}
+                    placeholder="Min 6 characters"
+                    required
+                    minLength={6}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
+                  />
+                </div>
 
-                  {/* Initial Password */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Initial Password
-                    </label>
-                    <input
-                      type="password"
-                      value={newStaffPassword}
-                      onChange={(e) => setNewStaffPassword(e.target.value)}
-                      placeholder="Min 6 characters"
-                      required
-                      minLength={6}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#ab3500] focus:ring-2 focus:ring-orange-100 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400"
-                    />
-                  </div>
-
-                  {/* Assigned Counter */}
+                {/* Assigned Counter (for staff) */}
+                {newStaffRole === 'staff' && (
                   <div className="space-y-1">
                     <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                       Assigned Counter
@@ -1197,98 +1207,104 @@ export default function AdminPortal({
                       <option value="Counter 3 (Bakery & Drinks)">Counter 3 (Bakery & Drinks)</option>
                     </select>
                   </div>
+                )}
 
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    disabled={staffSubmitting}
-                    className="w-full mt-2 py-3 px-4 rounded-xl bg-[#ab3500] hover:bg-[#8f2c00] active:scale-98 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-2"
-                  >
-                    {staffSubmitting ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <>
-                        <PlusIcon className="w-4 h-4" />
-                        <span>Create Kitchen Staff ID</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              )}
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={staffSubmitting}
+                  className="w-full mt-2 py-3 px-4 rounded-xl bg-[#ab3500] hover:bg-[#8f2c00] active:scale-98 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-2"
+                >
+                  {staffSubmitting ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <PlusIcon className="w-4 h-4" />
+                      <span>Create {newStaffRole === 'admin' ? 'Admin' : 'Kitchen Staff'} ID</span>
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
 
-            {/* Right: Active Staff Members (7 cols) */}
+            {/* Right: Active Staff & Admin Accounts (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
               <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-2xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                   <div>
                     <h3 className="font-black text-slate-900 text-sm font-display">
-                      Active Kitchen Staff Members
+                      Active Staff & Admin Accounts
                     </h3>
                     <p className="text-[11px] text-slate-500">
-                      These accounts have live access to the Kitchen Staff KDS Portal
+                      Authorized accounts for kitchen KDS and administration
                     </p>
                   </div>
                   <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl">
-                    {staffList.length} / 2 active
+                    {staffList.length} total
                   </span>
                 </div>
 
                 {staffLoading ? (
                   <div className="py-12 text-center text-xs text-slate-400 font-bold">
-                    Loading staff accounts...
+                    Loading accounts...
                   </div>
                 ) : staffList.length === 0 ? (
                   <div className="py-12 text-center space-y-2">
                     <span className="text-3xl">👨‍🍳</span>
-                    <p className="text-xs font-bold text-slate-600">No kitchen staff accounts created yet.</p>
-                    <p className="text-[11px] text-slate-400">
-                      Use the form on the left to create up to 2 staff accounts.
-                    </p>
+                    <p className="text-xs font-bold text-slate-600">No staff or admin accounts found.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {staffList.map((st, idx) => (
-                      <div
-                        key={st.id || idx}
-                        className="p-4 rounded-2xl border border-slate-200/90 hover:border-slate-300 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
-                      >
-                        <div className="flex items-start sm:items-center space-x-3.5">
-                          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
-                            {st.name ? st.name.charAt(0).toUpperCase() : 'S'}
-                          </div>
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-black text-xs text-slate-900">{st.name}</h4>
-                              <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900">
-                                Staff ID #{idx + 1}
-                              </span>
+                    {staffList.map((st, idx) => {
+                      const isAdmin = st.role === 'admin';
+                      return (
+                        <div
+                          key={st.id || idx}
+                          className="p-4 rounded-2xl border border-slate-200/90 hover:border-slate-300 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
+                        >
+                          <div className="flex items-start sm:items-center space-x-3.5">
+                            <div className={`w-10 h-10 rounded-2xl text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs ${
+                              isAdmin ? 'bg-slate-900' : 'bg-amber-500'
+                            }`}>
+                              {isAdmin ? '🛡️' : (st.name ? st.name.charAt(0).toUpperCase() : 'S')}
                             </div>
-                            <div className="mt-1 space-y-0.5 text-[11px] text-slate-500">
-                              <p className="font-medium text-slate-700">
-                                <span className="font-bold text-slate-400">Login ID:</span> {st.email}
-                              </p>
-                              {st.phone && (
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <h4 className="font-black text-xs text-slate-900">{st.name}</h4>
+                                <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded-md ${
+                                  isAdmin
+                                    ? 'bg-slate-900 text-white'
+                                    : 'bg-amber-100 text-amber-900'
+                                }`}>
+                                  {isAdmin ? 'Admin' : 'Kitchen Staff'}
+                                </span>
+                              </div>
+                              <div className="mt-1 space-y-0.5 text-[11px] text-slate-500">
                                 <p className="font-medium text-slate-700">
-                                  <span className="font-bold text-slate-400">Phone:</span> {st.phone}
+                                  <span className="font-bold text-slate-400">Login ID:</span> {st.email}
                                 </p>
-                              )}
+                                {st.phone && (
+                                  <p className="font-medium text-slate-700">
+                                    <span className="font-bold text-slate-400">Phone:</span> {st.phone}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center space-x-2 self-end sm:self-center">
-                          <button
-                            type="button"
-                            onClick={() => setDeletingStaff(st)}
-                            className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 transition text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-                          >
-                            <TrashIcon className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Delete ID</span>
-                          </button>
+                          <div className="flex items-center space-x-2 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => setDeletingStaff(st)}
+                              className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 transition text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Delete ID</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1298,7 +1314,7 @@ export default function AdminPortal({
       )}
 
       {/* ========================================================= */}
-      {/* MODAL: DELETE STAFF CONFIRMATION                          */}
+      {/* MODAL: DELETE STAFF / ADMIN CONFIRMATION                  */}
       {/* ========================================================= */}
       {deletingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
@@ -1308,13 +1324,15 @@ export default function AdminPortal({
                 🗑️
               </div>
               <div>
-                <h3 className="font-black text-sm text-slate-900">Delete Staff Account</h3>
+                <h3 className="font-black text-sm text-slate-900">
+                  Delete {deletingStaff.role === 'admin' ? 'Admin' : 'Staff'} Account
+                </h3>
                 <p className="text-[11px] text-slate-500">This action will immediately revoke login access.</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-              Are you sure you want to delete staff account <strong className="text-slate-900 font-bold">{deletingStaff.name}</strong> (<span className="text-slate-600 font-mono text-[11px]">{deletingStaff.email}</span>)?
+              Are you sure you want to delete {deletingStaff.role === 'admin' ? 'admin' : 'staff'} account <strong className="text-slate-900 font-bold">{deletingStaff.name}</strong> (<span className="text-slate-600 font-mono text-[11px]">{deletingStaff.email}</span>)?
             </p>
 
             <div className="flex items-center justify-end space-x-2 pt-2">
@@ -1337,7 +1355,7 @@ export default function AdminPortal({
         </div>
       )}
 
-{/* ========================================================= */}
+      {/* ========================================================= */}
       {/* MODAL: ADD / EDIT DISH */}
       {/* ========================================================= */}
       {(isAddDishModalOpen || editingDish) && (

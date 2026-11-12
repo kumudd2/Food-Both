@@ -693,10 +693,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // -------------------------------------------------------------
-  // KITCHEN STAFF MANAGEMENT ENDPOINTS (ADMIN ONLY, MAX 2 STAFF)
+  // KITCHEN STAFF & ADMIN ACCOUNTS MANAGEMENT (ADMIN ONLY)
   // -------------------------------------------------------------
 
-  // GET /api/admin/staff (List staff accounts - max 2 allowed)
+  // GET /api/admin/staff (List staff and admin accounts)
   if (pathname === '/api/admin/staff' && req.method === 'GET') {
     try {
       const dbInfo = await checkDatabase();
@@ -712,23 +712,29 @@ const server = http.createServer(async (req, res) => {
               role: 'staff',
               createdAt: 'Initial',
             },
+            {
+              id: '33333333-3333-3333-3333-333333333333',
+              name: 'Cafeteria Manager Sharma',
+              email: 'cafeteria.admin@college.edu',
+              phone: '+91 98765 43212',
+              role: 'admin',
+              createdAt: 'Initial',
+            },
           ],
-          maxStaff: 2,
-          currentCount: 1,
+          currentCount: 2,
         });
       }
 
       const staffRes = await pool.query(`
         SELECT id, full_name as name, email, phone, role, created_at as "createdAt"
         FROM users
-        WHERE role = 'staff'
-        ORDER BY created_at ASC;
+        WHERE role IN ('staff', 'admin')
+        ORDER BY role ASC, created_at ASC;
       `);
 
       return sendJson(res, 200, {
         dbConnected: true,
         staff: staffRes.rows,
-        maxStaff: 2,
         currentCount: staffRes.rows.length,
       });
     } catch (err) {
@@ -736,7 +742,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /api/admin/staff (Create new staff account - max 2 allowed)
+  // POST /api/admin/staff (Create staff or admin account - unlimited)
   if (pathname === '/api/admin/staff' && req.method === 'POST') {
     try {
       const data = await parseJson(req);
@@ -745,33 +751,26 @@ const server = http.createServer(async (req, res) => {
       const rawPhone = (data.phone || '').trim();
       const phone = cleanPhoneNumber(rawPhone);
       const password = data.password || '';
+      const targetRole = data.role === 'admin' ? 'admin' : 'staff';
 
       if (!fullName) {
-        return sendJson(res, 400, { error: 'Please enter staff member name.' });
+        return sendJson(res, 400, { error: 'Please enter account holder name.' });
       }
       if (!rawIdentifier && !phone) {
-        return sendJson(res, 400, { error: 'Please enter a staff email or mobile number for login.' });
+        return sendJson(res, 400, { error: 'Please enter an email or mobile number for login.' });
       }
       if (!password || password.length < 6) {
         return sendJson(res, 400, { error: 'Password must be at least 6 characters long.' });
       }
 
+      const domain = targetRole === 'admin' ? 'foodbooth.admin' : 'foodbooth.staff';
       const email = rawIdentifier.includes('@')
         ? rawIdentifier
-        : `${(rawIdentifier || phone).replace(/[^a-z0-9]/g, '')}@foodbooth.staff`;
+        : `${(rawIdentifier || phone).replace(/[^a-z0-9]/g, '')}@${domain}`;
 
       const dbInfo = await checkDatabase();
       if (!dbInfo.dbConnected) {
         return sendJson(res, 400, { error: 'Database is offline or not connected.' });
-      }
-
-      // Strict enforcement: Max 2 staff members permitted
-      const countRes = await pool.query("SELECT COUNT(*) as count FROM users WHERE role = 'staff';");
-      const currentCount = parseInt(countRes.rows[0].count, 10);
-      if (currentCount >= 2) {
-        return sendJson(res, 400, {
-          error: 'Maximum limit reached: Only 2 kitchen staff accounts are allowed. You must delete an existing staff account first.',
-        });
       }
 
       // Check if email or phone already exists
@@ -786,13 +785,14 @@ const server = http.createServer(async (req, res) => {
       const passwordHash = await bcrypt.hash(password, 10);
       const insertRes = await pool.query(`
         INSERT INTO users (full_name, email, phone, password_hash, role, is_active)
-        VALUES ($1, $2, $3, $4, 'staff', TRUE)
+        VALUES ($1, $2, $3, $4, $5, TRUE)
         RETURNING id, full_name as name, email, phone, role, created_at as "createdAt";
-      `, [fullName, email, phone || null, passwordHash]);
+      `, [fullName, email, phone || null, passwordHash, targetRole]);
 
+      const roleLabel = targetRole === 'admin' ? 'Admin' : 'Kitchen Staff';
       return sendJson(res, 201, {
         success: true,
-        message: `Staff login account created for ${fullName}!`,
+        message: `${roleLabel} account created for ${fullName}!`,
         staff: insertRes.rows[0],
       });
     } catch (err) {
@@ -800,12 +800,12 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // DELETE /api/admin/staff/:staffId (Delete staff account)
+  // DELETE /api/admin/staff/:staffId (Delete staff or admin account)
   if (pathname.startsWith('/api/admin/staff/') && req.method === 'DELETE') {
     try {
       const staffId = pathname.replace('/api/admin/staff/', '').trim();
       if (!staffId) {
-        return sendJson(res, 400, { error: 'Staff ID is required.' });
+        return sendJson(res, 400, { error: 'Account ID is required.' });
       }
 
       const dbInfo = await checkDatabase();
@@ -813,20 +813,33 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Database is offline.' });
       }
 
-      // Safety check: ONLY allow deleting users with role 'staff'
-      const delRes = await pool.query(
-        "DELETE FROM users WHERE (id::text = $1 OR email = $1) AND role = 'staff' RETURNING id, full_name as name, email;",
+      // Find user
+      const targetUser = await pool.query(
+        "SELECT id, role, full_name as name, email FROM users WHERE (id::text = $1 OR email = $1) AND role IN ('staff', 'admin');",
         [staffId]
       );
 
-      if (delRes.rows.length === 0) {
-        return sendJson(res, 404, { error: 'Staff account not found or cannot be deleted.' });
+      if (targetUser.rows.length === 0) {
+        return sendJson(res, 404, { error: 'Staff or Admin account not found.' });
       }
 
+      const userToDelete = targetUser.rows[0];
+
+      // Prevent deleting the last remaining admin
+      if (userToDelete.role === 'admin') {
+        const adminCount = await pool.query("SELECT COUNT(*) as count FROM users WHERE role = 'admin';");
+        if (parseInt(adminCount.rows[0].count, 10) <= 1) {
+          return sendJson(res, 400, { error: 'Cannot delete the only remaining admin account.' });
+        }
+      }
+
+      await pool.query("DELETE FROM users WHERE id = $1;", [userToDelete.id]);
+
+      const roleLabel = userToDelete.role === 'admin' ? 'Admin' : 'Staff';
       return sendJson(res, 200, {
         success: true,
-        message: `Staff member ${delRes.rows[0].name} deleted successfully.`,
-        deleted: delRes.rows[0],
+        message: `${roleLabel} member ${userToDelete.name} deleted successfully.`,
+        deleted: userToDelete,
       });
     } catch (err) {
       return sendJson(res, 500, { error: err.message });

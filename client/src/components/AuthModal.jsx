@@ -508,7 +508,7 @@ export default function AuthModal({
                       <span>Kitchen Staff Sign-In Only</span>
                     </p>
                     <p className="text-[10px] text-amber-800 mt-0.5 leading-relaxed">
-                      Staff accounts can only be created by the Cafeteria Admin in the Admin Portal (maximum 2 staff members).
+                      Staff and admin accounts can only be created by the Cafeteria Admin in the Admin Portal.
                     </p>
                   </div>
                 ) : (
