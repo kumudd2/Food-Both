@@ -81,6 +81,11 @@ export default function Navbar({
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span>PostgreSQL Live</span>
                 </span>
+              ) : !dbStatus?.checked ? (
+                <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-amber-200 text-amber-700 bg-amber-50 hidden md:inline-flex items-center space-x-1" title="Connecting to PostgreSQL database...">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                  <span>Connecting...</span>
+                </span>
               ) : (
                 <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-slate-200 text-slate-500 bg-slate-50 hidden md:inline-flex items-center space-x-1" title="PostgreSQL not detected; running on browser localStorage & mockData.">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
@@ -328,6 +333,11 @@ export default function Navbar({
                 <span className="font-bold text-emerald-600 flex items-center space-x-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span>PostgreSQL Online</span>
+                </span>
+              ) : !dbStatus?.checked ? (
+                <span className="font-bold text-amber-600 flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                  <span>Connecting...</span>
                 </span>
               ) : (
                 <span className="font-bold text-slate-500 flex items-center space-x-1">
