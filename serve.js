@@ -997,7 +997,8 @@ const server = http.createServer(async (req, res) => {
           COALESCE(u.full_name, 'Student') as "customerName",
           COALESCE(sp.roll_number, 'STU-2024') as "studentId",
           COALESCE(RIGHT(o.pickup_qr_token, 4), '4821') as "pin",
-          to_char(o.created_at, 'HH12:MI AM') as "placedAt"
+          to_char(o.created_at, 'HH12:MI AM') as "placedAt",
+          o.created_at as "createdAt"
         FROM orders o
         LEFT JOIN users u ON o.user_id = u.id
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
@@ -1073,6 +1074,7 @@ const server = http.createServer(async (req, res) => {
           items: data.items,
           counter: data.counter,
           placedAt: 'Just now',
+          createdAt: new Date().toISOString(),
         },
       });
     } catch (err) {

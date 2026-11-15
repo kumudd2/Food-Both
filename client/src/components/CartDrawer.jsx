@@ -69,7 +69,7 @@ export default function CartDrawer({
   const handleCheckout = () => {
     if (cartItems.length === 0) return;
     if (paymentMethod === 'Campus Meal Card' && walletBalance < grandTotal) {
-      alert(`Insufficient Campus Wallet balance (Current: ₹${walletBalance}). Please recharge or select UPI/Cash!`);
+      alert(`Insufficient Campus Wallet balance (Current: ₹${walletBalance}). Please recharge your wallet or select UPI!`);
       return;
     }
 
@@ -295,11 +295,6 @@ export default function CartDrawer({
                         id: 'UPI Pre-Payment',
                         label: 'UPI Pre-Payment',
                         sub: 'Pay online via GPay, PhonePe, Paytm',
-                      },
-                      {
-                        id: 'Pay at Counter',
-                        label: 'Cash on Pickup',
-                        sub: 'Pay at counter when picking up meal',
                       },
                     ].map((m) => (
                       <label
