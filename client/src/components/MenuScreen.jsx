@@ -1,6 +1,7 @@
 // client/src/components/MenuScreen.jsx
 import React from 'react';
 import { CATEGORIES } from '../data/mockData';
+import { matchesCategory } from '../utils/categoryMatcher';
 import {
   SearchIcon,
   ClockIcon,
@@ -58,16 +59,21 @@ export default function MenuScreen({
 
   const filteredItems = foodItems
     .filter((item) => {
-      const matchCategory = selectedCategory === 'all' || item.category === selectedCategory;
+      const matchCategory = matchesCategory(item.category, selectedCategory);
+      const cleanSearch = (searchQuery || '').trim().toLowerCase();
       const matchSearch =
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.counter.toLowerCase().includes(searchQuery.toLowerCase());
+        !cleanSearch ||
+        (item.name && item.name.toLowerCase().includes(cleanSearch)) ||
+        (item.description && item.description.toLowerCase().includes(cleanSearch)) ||
+        (item.counter && item.counter.toLowerCase().includes(cleanSearch)) ||
+        (item.category && item.category.toLowerCase().includes(cleanSearch));
+      const isItemVeg = item.isVeg === true || item.diet === 'veg' || item.diet === 'vegan';
+      const isItemVegan = item.diet === 'vegan' || (item.name && item.name.toLowerCase().includes('vegan'));
       const matchDiet =
         dietaryFilter === 'all' ||
-        (dietaryFilter === 'veg' && item.isVeg) ||
-        (dietaryFilter === 'non_veg' && !item.isVeg) ||
-        (dietaryFilter === 'vegan' && item.diet === 'vegan');
+        (dietaryFilter === 'veg' && isItemVeg) ||
+        (dietaryFilter === 'non_veg' && !isItemVeg) ||
+        (dietaryFilter === 'vegan' && isItemVegan);
       return matchCategory && matchSearch && matchDiet;
     })
     .sort((a, b) => {
@@ -282,8 +288,27 @@ export default function MenuScreen({
 
       {/* Responsive Food Cards Grid (1 to 6 columns) */}
       {filteredItems.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-xs text-slate-500">
-          No dishes match your filter criteria.
+        <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border border-slate-200/80 shadow-2xs space-y-3">
+          <div className="text-3xl">🍽️</div>
+          <p className="text-sm font-bold text-slate-800">
+            No dishes match your selected filter criteria
+          </p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            {searchQuery
+              ? `No dishes found for "${searchQuery}". Try a different keyword or reset filters.`
+              : 'Try selecting "All Dishes" or clearing the dietary filters to see all available menu items.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('all');
+              setDietaryFilter('all');
+              setSearchQuery('');
+            }}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5"
+          >
+            <span>Reset All Filters</span>
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-5 w-full">

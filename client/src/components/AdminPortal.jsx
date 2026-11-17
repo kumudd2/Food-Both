@@ -1,6 +1,7 @@
 // client/src/components/AdminPortal.jsx
 // Minimalist, Clean Light-Themed Staff KDS & Management Portal (No emojis)
 import React from 'react';
+import { matchesCategory, CANONICAL_CATEGORIES } from '../utils/categoryMatcher';
 import {
   SearchIcon,
   CheckIcon,
@@ -224,6 +225,7 @@ export default function AdminPortal({
   const [inventorySearch, setInventorySearch] = React.useState('');
   const [inventoryCounter, setInventoryCounter] = React.useState('all');
   const [inventoryStockFilter, setInventoryStockFilter] = React.useState('all');
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = React.useState('all');
   const [isAddDishModalOpen, setIsAddDishModalOpen] = React.useState(false);
   const [editingDish, setEditingDish] = React.useState(null);
 
@@ -266,13 +268,20 @@ export default function AdminPortal({
   const [logCounterFilter, setLogCounterFilter] = React.useState('all');
   const [selectedOrderDetail, setSelectedOrderDetail] = React.useState(null);
 
-  // Filtered KDS Orders
+  // Filtered KDS Orders (Guarded against nulls, numbers & undefined)
   const filteredKdsOrders = orders.filter((o) => {
-    const matchCounter = filterCounter === 'all' || o.counter.includes(filterCounter);
+    const cleanSearch = (orderSearch || '').trim().toLowerCase();
+    const matchCounter =
+      filterCounter === 'all' ||
+      (o.counter && o.counter.toLowerCase().includes(filterCounter.toLowerCase())) ||
+      (o.counter && filterCounter.toLowerCase().includes(o.counter.toLowerCase()));
     const matchSearch =
-      o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      (o.customerName && o.customerName.toLowerCase().includes(orderSearch.toLowerCase())) ||
-      (o.pin && o.pin.includes(orderSearch));
+      !cleanSearch ||
+      (o.id && o.id.toLowerCase().includes(cleanSearch)) ||
+      (o.customerName && o.customerName.toLowerCase().includes(cleanSearch)) ||
+      (o.pin && String(o.pin).includes(cleanSearch)) ||
+      (o.pickupSlot && o.pickupSlot.toLowerCase().includes(cleanSearch)) ||
+      (Array.isArray(o.items) && o.items.some((it) => it.name && it.name.toLowerCase().includes(cleanSearch)));
     return matchCounter && matchSearch;
   });
 
@@ -524,18 +533,19 @@ export default function AdminPortal({
   const neutralFeedbacks = React.useMemo(() => allFeedbacks.filter((f) => f.sentiment === 'neutral'), [allFeedbacks]);
 
   const filteredFeedbacks = React.useMemo(() => {
+    const cleanSearch = (feedbackSearch || '').trim().toLowerCase();
     return allFeedbacks.filter((f) => {
       const matchSentiment =
         feedbackSentimentFilter === 'all' || f.sentiment === feedbackSentimentFilter;
       const matchType =
         feedbackTypeFilter === 'all' || f.type === feedbackTypeFilter;
       const matchSearch =
-        !feedbackSearch ||
-        f.studentName.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
-        f.notes.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
-        f.title.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
-        f.counter.toLowerCase().includes(feedbackSearch.toLowerCase()) ||
-        (f.tags && f.tags.some((t) => t.toLowerCase().includes(feedbackSearch.toLowerCase())));
+        !cleanSearch ||
+        (f.studentName && f.studentName.toLowerCase().includes(cleanSearch)) ||
+        (f.notes && f.notes.toLowerCase().includes(cleanSearch)) ||
+        (f.title && f.title.toLowerCase().includes(cleanSearch)) ||
+        (f.counter && f.counter.toLowerCase().includes(cleanSearch)) ||
+        (Array.isArray(f.tags) && f.tags.some((t) => t && t.toLowerCase().includes(cleanSearch)));
       return matchSentiment && matchType && matchSearch;
     });
   }, [allFeedbacks, feedbackSentimentFilter, feedbackTypeFilter, feedbackSearch]);
@@ -550,26 +560,45 @@ export default function AdminPortal({
 
   // Filtered Inventory Dishes
   const filteredFoodItems = foodItems.filter((item) => {
-    const matchSearch = item.name.toLowerCase().includes(inventorySearch.toLowerCase());
-    const matchCounter = inventoryCounter === 'all' || item.counter.includes(inventoryCounter);
+    const cleanSearch = (inventorySearch || '').trim().toLowerCase();
+    const matchSearch =
+      !cleanSearch ||
+      (item.name && item.name.toLowerCase().includes(cleanSearch)) ||
+      (item.description && item.description.toLowerCase().includes(cleanSearch)) ||
+      (item.category && item.category.toLowerCase().includes(cleanSearch));
+    const matchCounter =
+      inventoryCounter === 'all' ||
+      (item.counter && item.counter.toLowerCase().includes(inventoryCounter.toLowerCase())) ||
+      (item.counter && inventoryCounter.toLowerCase().includes(item.counter.toLowerCase()));
+    const isInstock = item.inStock === true || item.inStock === 'true' || item.is_available === true;
     const matchStock =
       inventoryStockFilter === 'all'
         ? true
         : inventoryStockFilter === 'instock'
-        ? item.inStock
-        : !item.inStock;
-    return matchSearch && matchCounter && matchStock;
+        ? isInstock
+        : !isInstock;
+    const matchCat =
+      !inventoryCategoryFilter || inventoryCategoryFilter === 'all'
+        ? true
+        : matchesCategory(item.category, inventoryCategoryFilter);
+    return matchSearch && matchCounter && matchStock && matchCat;
   });
 
   // Filtered Orders for Audit Log
   const filteredAuditOrders = orders.filter((o) => {
+    const cleanSearch = (logSearch || '').trim().toLowerCase();
     const matchSearch =
-      o.id.toLowerCase().includes(logSearch.toLowerCase()) ||
-      (o.customerName && o.customerName.toLowerCase().includes(logSearch.toLowerCase())) ||
-      (o.studentId && o.studentId.toLowerCase().includes(logSearch.toLowerCase())) ||
-      (o.pin && o.pin.includes(logSearch));
+      !cleanSearch ||
+      (o.id && o.id.toLowerCase().includes(cleanSearch)) ||
+      (o.customerName && o.customerName.toLowerCase().includes(cleanSearch)) ||
+      (o.studentId && o.studentId.toLowerCase().includes(cleanSearch)) ||
+      (o.pin && String(o.pin).includes(cleanSearch)) ||
+      (Array.isArray(o.items) && o.items.some((it) => it.name && it.name.toLowerCase().includes(cleanSearch)));
     const matchStatus = logStatusFilter === 'all' || o.status === logStatusFilter;
-    const matchCounter = logCounterFilter === 'all' || (o.counter && o.counter.includes(logCounterFilter));
+    const matchCounter =
+      logCounterFilter === 'all' ||
+      (o.counter && o.counter.toLowerCase().includes(logCounterFilter.toLowerCase())) ||
+      (o.counter && logCounterFilter.toLowerCase().includes(o.counter.toLowerCase()));
     return matchSearch && matchStatus && matchCounter;
   });
 
@@ -889,6 +918,24 @@ export default function AdminPortal({
                   placeholder="Search dish name..."
                   className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-slate-400"
                 />
+              </div>
+
+              {/* Category Filter */}
+              <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                <select
+                  value={inventoryCategoryFilter}
+                  onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                  className="bg-transparent text-[11px] font-bold text-slate-700 px-1.5 py-0.5 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Breakfast">Breakfast</option>
+                  <option value="Mains & Thalis">Mains & Thalis</option>
+                  <option value="Burgers & Pizzas">Burgers & Pizza</option>
+                  <option value="Chaat & Snacks">Snacks & Chaat</option>
+                  <option value="Healthy Bowls">Healthy Bowls</option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Desserts">Desserts</option>
+                </select>
               </div>
 
               {/* Counter Filter */}
@@ -1933,7 +1980,7 @@ export default function AdminPortal({
 
               {/* Status Filter */}
               <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                {['all', 'placed', 'preparing', 'ready', 'collected'].map((st) => (
+                {['all', 'placed', 'preparing', 'ready', 'collected', 'cancelled'].map((st) => (
                   <button
                     key={st}
                     onClick={() => setLogStatusFilter(st)}

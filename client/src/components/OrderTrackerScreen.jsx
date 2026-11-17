@@ -465,7 +465,7 @@ export default function OrderTrackerScreen({
                     Ordered Dishes
                   </span>
                   <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                    {activeOrder.items.map((it, i) => (
+                    {Array.isArray(activeOrder.items) && activeOrder.items.map((it, i) => (
                       <div
                         key={i}
                         className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs"
@@ -587,7 +587,7 @@ export default function OrderTrackerScreen({
                       </div>
 
                       <div className="text-xs text-slate-600 font-medium">
-                        {ord.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                        {Array.isArray(ord.items) ? ord.items.map((i) => `${i.quantity}x ${i.name}`).join(', ') : 'Order items'}
                       </div>
 
                       <div className="text-[11px] text-slate-400">
