@@ -127,14 +127,6 @@ export default function App() {
         const ordersRes = await fetch('/api/orders');
         const ordersData = await ordersRes.json();
         if (ordersData && Array.isArray(ordersData.orders) && ordersData.orders.length > 0) {
-          if (role === 'student') {
-            const unratedRecent = ordersData.orders.find(
-              (o) => o.status === 'collected' && !o.rating && !dismissedFeedbackIds.includes(o.id)
-            );
-            if (unratedRecent) {
-              setFeedbackPopupOrder((curr) => curr || unratedRecent);
-            }
-          }
           ordersData.orders.forEach((o) => {
             prevOrderStatusesRef.current[o.id] = o.status;
           });
@@ -209,7 +201,7 @@ export default function App() {
           const newOrders = data.orders;
           const prevStatuses = prevOrderStatusesRef.current;
 
-          // Check if any order transitioned to 'collected' and hasn't been rated yet
+          // Only pop feedback modal when an order is actively picked up in that live instance
           if (role === 'student') {
             const newlyCollected = newOrders.find(
               (ord) =>
@@ -220,19 +212,8 @@ export default function App() {
                 prevStatuses[ord.id] !== 'collected'
             );
 
-            const targetOrder = newlyCollected || (
-              !feedbackPopupOrder
-                ? newOrders.find(
-                    (ord) =>
-                      ord.status === 'collected' &&
-                      !ord.rating &&
-                      !dismissedFeedbackIds.includes(ord.id)
-                  )
-                : null
-            );
-
-            if (targetOrder) {
-              setFeedbackPopupOrder((current) => current || targetOrder);
+            if (newlyCollected) {
+              setFeedbackPopupOrder(newlyCollected);
             }
           }
 
@@ -662,7 +643,7 @@ export default function App() {
                   foodItems={foodItems}
                   cartItems={cartItems}
                   orders={orders}
-                  unratedOrder={orders.find((ord) => ord.status === 'collected' && !ord.rating)}
+                  unratedOrder={orders.find((ord) => ord.status === 'collected' && !ord.rating && !dismissedFeedbackIds.includes(ord.id))}
                   onOpenFeedbackModal={(ord) => setFeedbackPopupOrder(ord)}
                   onSubmitGeneralFeedback={handleGeneralFeedback}
                   user={user}
